@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/JwtRefresh.Api/JwtRefresh.Api.csproj" Id="a58ff9c5-76b9-487a-b9fb-9d5a72774b5a" />
+  <Project Path="src/JwtRefresh.Domain/JwtRefresh.Domain.csproj" Id="9e44e46c-c2d4-435f-9988-d341b194a0ac" />
+  <Project Path="tests/JwtRefresh.Api.IntegrationTests/JwtRefresh.Api.IntegrationTests.csproj" Id="ed35f3e7-9423-42e3-a201-946ced1f344c" />
+  <Project Path="tests/JwtRefresh.Domain.Tests/JwtRefresh.Domain.Tests.csproj" Id="3f2e6353-fd9a-4a82-8d79-9f630b6af6d2" />
+</Solution>

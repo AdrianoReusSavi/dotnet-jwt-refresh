@@ -1,0 +1,14 @@
+**/bin
+**/obj
+**/.git
+**/.idea
+**/Properties/launchSettings.json
+.vs/
+.gitignore
+.dockerignore
+*.user
+*.suo
+README.md
+LICENSE
+Dockerfile
+docker-compose.yml

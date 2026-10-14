@@ -64,4 +64,24 @@ public class RefreshTokenTests
 
         Assert.Equal(userId, token.UserId);
     }
+
+    [Fact]
+    public void Hash_Returns_Same_Value_For_Same_Input()
+    {
+        Assert.Equal(RefreshToken.Hash("token"), RefreshToken.Hash("token"));
+    }
+
+    [Fact]
+    public void Hash_Returns_Different_Values_For_Different_Inputs()
+    {
+        Assert.NotEqual(RefreshToken.Hash("token-a"), RefreshToken.Hash("token-b"));
+    }
+
+    [Fact]
+    public void Hash_Does_Not_Contain_The_Raw_Value()
+    {
+        var rawValue = "token";
+
+        Assert.DoesNotContain(rawValue, RefreshToken.Hash(rawValue));
+    }
 }

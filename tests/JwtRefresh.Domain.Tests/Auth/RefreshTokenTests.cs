@@ -54,4 +54,14 @@ public class RefreshTokenTests
 
         Assert.NotEqual(token.FamilyId, newToken.FamilyId);
     }
+
+    [Fact]
+    public void Issue_Assigns_The_Given_User()
+    {
+        var userId = Guid.NewGuid();
+
+        var (token, _) = RefreshToken.Issue(userId, Now, Lifetime);
+
+        Assert.Equal(userId, token.UserId);
+    }
 }

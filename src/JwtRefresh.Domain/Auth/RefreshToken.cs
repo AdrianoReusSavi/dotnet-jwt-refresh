@@ -1,4 +1,6 @@
-using JwtRefresh.Domain.Enums;
+using System.Buffers.Text;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace JwtRefresh.Domain.Auth;
 
@@ -13,11 +15,32 @@ public sealed class RefreshToken
     public DateTimeOffset? UsedAt { get; private set; }
     public DateTimeOffset? RevokedAt { get; private set; }
 
+    private RefreshToken(Guid id, Guid userId, Guid familyId, string tokenHash, DateTimeOffset createdAt, TimeSpan lifetime)
+    {
+        Id = id;
+        UserId = userId;
+        FamilyId = familyId;
+        TokenHash = tokenHash;
+        CreatedAt = createdAt;
+        ExpiresAt = createdAt + lifetime;
+    }
+
     public static (RefreshToken Token, string RawValue) Issue(Guid userId, DateTimeOffset now, TimeSpan lifetime)
-        => throw new NotImplementedException();
+    {
+        var bytes = RandomNumberGenerator.GetBytes(32);
+        var rawValue = Base64Url.EncodeToString(bytes);
+        var tokenHash = Hash(rawValue);
+
+        return (new RefreshToken(Guid.NewGuid(), userId, Guid.NewGuid(), tokenHash, now, lifetime), rawValue);
+    }
 
     public static string Hash(string rawValue)
-        => throw new NotImplementedException();
+    {
+        var bytes = Encoding.UTF8.GetBytes(rawValue);
+        var hash = SHA256.HashData(bytes);
+
+        return Convert.ToHexString(hash);
+    }
 
     public bool IsActive(DateTimeOffset now)
         => throw new NotImplementedException();

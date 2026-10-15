@@ -1,4 +1,5 @@
 using JwtRefresh.Domain.Auth;
+using JwtRefresh.Domain.Enums;
 
 namespace JwtRefresh.Domain.Tests.Auth;
 
@@ -150,5 +151,79 @@ public class RefreshTokenTests
         token.Revoke(newRevokedAt);
 
         Assert.Equal(revokedAt, token.RevokedAt);
+    }
+
+    [Fact]
+    public void Rotate_Returns_Rotated_For_An_Active_Token()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        var result = token.Rotate(Now + TimeSpan.FromDays(1), Lifetime);
+
+        Assert.Equal(RotationStatus.Rotated, result.Status);
+    }
+
+    [Fact]
+    public void Rotate_Marks_The_Token_As_Used()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        var rotatedAt = Now + TimeSpan.FromDays(1);
+        token.Rotate(rotatedAt, Lifetime);
+
+        Assert.Equal(rotatedAt, token.UsedAt);
+    }
+
+    [Fact]
+    public void Rotate_Keeps_The_Same_User_And_Family()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        var result = token.Rotate(Now + TimeSpan.FromDays(1), Lifetime);
+        var newToken = result.Next;
+
+        Assert.NotNull(newToken);
+        Assert.Equal(token.UserId, newToken.UserId);
+        Assert.Equal(token.FamilyId, newToken.FamilyId);
+    }
+
+    [Fact]
+    public void Rotate_Issues_A_Different_Token()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        var result = token.Rotate(Now + TimeSpan.FromDays(1), Lifetime);
+        var newToken = result.Next;
+
+        Assert.NotNull(newToken);
+        Assert.NotNull(result.NextRawValue);
+        Assert.NotEqual(token.Id, newToken.Id);
+        Assert.NotEqual(token.TokenHash, newToken.TokenHash);
+        Assert.Equal(RefreshToken.Hash(result.NextRawValue), newToken.TokenHash);
+    }
+
+    [Fact]
+    public void Rotate_Starts_The_Next_Token_Lifetime_At_Rotation_Time()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        var rotatedAt = Now + TimeSpan.FromDays(1);
+        var result = token.Rotate(rotatedAt, Lifetime);
+        var newToken = result.Next;
+
+        Assert.NotNull(newToken);
+        Assert.Equal(rotatedAt, newToken.CreatedAt);
+        Assert.Equal(rotatedAt + Lifetime, newToken.ExpiresAt);
+    }
+
+    [Fact]
+    public void IsActive_Returns_False_After_Rotate()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        var rotatedAt = Now + TimeSpan.FromDays(1);
+        token.Rotate(rotatedAt, Lifetime);
+
+        Assert.False(token.IsActive(rotatedAt));
     }
 }

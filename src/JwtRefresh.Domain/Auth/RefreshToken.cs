@@ -43,11 +43,11 @@ public sealed class RefreshToken
     }
 
     public bool IsActive(DateTimeOffset now)
-        => throw new NotImplementedException();
+        => now < ExpiresAt && RevokedAt is null;
 
     public RotationResult Rotate(DateTimeOffset now, TimeSpan lifetime)
         => throw new NotImplementedException();
 
     public void Revoke(DateTimeOffset now)
-        => throw new NotImplementedException();
+        => RevokedAt ??= now;
 }

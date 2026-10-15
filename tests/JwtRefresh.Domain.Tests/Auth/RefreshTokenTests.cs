@@ -84,4 +84,71 @@ public class RefreshTokenTests
 
         Assert.DoesNotContain(rawValue, RefreshToken.Hash(rawValue));
     }
+
+    [Fact]
+    public void IsActive_Returns_True_For_A_New_Token()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        Assert.True(token.IsActive(Now + TimeSpan.FromDays(1)));
+    }
+
+    [Fact]
+    public void IsActive_Returns_True_Just_Before_Expiration()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        Assert.True(token.IsActive(Now + Lifetime - TimeSpan.FromTicks(1)));
+    }
+
+    [Fact]
+    public void IsActive_Returns_False_After_Expiration()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        Assert.False(token.IsActive(Now + Lifetime + TimeSpan.FromDays(1)));
+    }
+
+    [Fact]
+    public void IsActive_Returns_False_At_The_Exact_Expiration_Time()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        Assert.False(token.IsActive(Now + Lifetime));
+    }
+
+    [Fact]
+    public void IsActive_Returns_False_After_Revoke()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        token.Revoke(Now + TimeSpan.FromDays(1));
+
+        Assert.False(token.IsActive(Now + TimeSpan.FromDays(2)));
+    }
+
+    [Fact]
+    public void Revoke_Records_When_It_Happened()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var revokedAt = Now + TimeSpan.FromDays(1);
+
+        token.Revoke(revokedAt);
+
+        Assert.Equal(revokedAt, token.RevokedAt);
+    }
+
+    [Fact]
+    public void Revoke_Twice_Keeps_The_First_Revocation_Time()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        var revokedAt = Now + TimeSpan.FromDays(1);
+        var newRevokedAt = Now + TimeSpan.FromDays(2);
+
+        token.Revoke(revokedAt);
+        token.Revoke(newRevokedAt);
+
+        Assert.Equal(revokedAt, token.RevokedAt);
+    }
 }

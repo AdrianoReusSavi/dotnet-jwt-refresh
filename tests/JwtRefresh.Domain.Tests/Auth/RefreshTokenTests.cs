@@ -175,6 +175,17 @@ public class RefreshTokenTests
     }
 
     [Fact]
+    public void Rotate_Does_Not_Revoke_The_Token()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        var rotatedAt = Now + TimeSpan.FromDays(1);
+        token.Rotate(rotatedAt, Lifetime);
+
+        Assert.Null(token.RevokedAt);
+    }
+
+    [Fact]
     public void Rotate_Keeps_The_Same_User_And_Family()
     {
         var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);

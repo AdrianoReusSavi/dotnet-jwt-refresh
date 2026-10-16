@@ -1,6 +1,7 @@
 using System.Buffers.Text;
 using System.Security.Cryptography;
 using System.Text;
+using JwtRefresh.Domain.Enums;
 
 namespace JwtRefresh.Domain.Auth;
 
@@ -27,9 +28,7 @@ public sealed class RefreshToken
 
     public static (RefreshToken Token, string RawValue) Issue(Guid userId, DateTimeOffset now, TimeSpan lifetime)
     {
-        var bytes = RandomNumberGenerator.GetBytes(32);
-        var rawValue = Base64Url.EncodeToString(bytes);
-        var tokenHash = Hash(rawValue);
+        var (rawValue, tokenHash) = GenerateRawValue();
 
         return (new RefreshToken(Guid.NewGuid(), userId, Guid.NewGuid(), tokenHash, now, lifetime), rawValue);
     }
@@ -43,11 +42,24 @@ public sealed class RefreshToken
     }
 
     public bool IsActive(DateTimeOffset now)
-        => now < ExpiresAt && RevokedAt is null;
+        => now < ExpiresAt && UsedAt is null && RevokedAt is null;
 
     public RotationResult Rotate(DateTimeOffset now, TimeSpan lifetime)
-        => throw new NotImplementedException();
+    {
+        UsedAt = now;
+
+        var (rawValue, tokenHash) = GenerateRawValue();
+
+        return new RotationResult(RotationStatus.Rotated, new RefreshToken(Guid.NewGuid(), UserId, FamilyId, tokenHash, now, lifetime), rawValue);
+    }
 
     public void Revoke(DateTimeOffset now)
         => RevokedAt ??= now;
+
+    private static (string RawValue, string TokenHash) GenerateRawValue()
+    {
+        var bytes = RandomNumberGenerator.GetBytes(32);
+        var rawValue = Base64Url.EncodeToString(bytes);
+        return (rawValue, Hash(rawValue));
+    }
 }

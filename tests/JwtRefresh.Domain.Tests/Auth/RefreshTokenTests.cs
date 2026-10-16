@@ -237,4 +237,101 @@ public class RefreshTokenTests
 
         Assert.False(token.IsActive(rotatedAt));
     }
+
+    [Fact]
+    public void Rotate_Returns_ReuseDetected_For_A_Used_Token()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        token.Rotate(Now + TimeSpan.FromDays(1), Lifetime);
+        var result = token.Rotate(Now + TimeSpan.FromDays(2), Lifetime);
+
+        Assert.Equal(RotationStatus.ReuseDetected, result.Status);
+        Assert.Equal(Now + TimeSpan.FromDays(1), token.UsedAt);
+        Assert.Null(result.Next);
+        Assert.Null(result.NextRawValue);
+    }
+
+    [Fact]
+    public void Rotate_Returns_Expired_For_An_Expired_Token()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        var rotatedAt = Now + Lifetime + TimeSpan.FromTicks(1);
+        var result = token.Rotate(rotatedAt, Lifetime);
+
+        Assert.Equal(RotationStatus.Expired, result.Status);
+        Assert.Null(token.UsedAt);
+        Assert.Null(result.Next);
+        Assert.Null(result.NextRawValue);
+    }
+
+    [Fact]
+    public void Rotate_Returns_Revoked_For_A_Revoked_Token()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        token.Revoke(Now + TimeSpan.FromDays(1));
+        var result = token.Rotate(Now + TimeSpan.FromDays(2), Lifetime);
+
+        Assert.Equal(RotationStatus.Revoked, result.Status);
+        Assert.Null(token.UsedAt);
+        Assert.Null(result.Next);
+        Assert.Null(result.NextRawValue);
+    }
+
+    [Fact]
+    public void Rotate_Returns_ReuseDetected_For_A_Used_And_Expired_Token()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        var rotatedAt = Now + TimeSpan.FromDays(1);
+        var reusedAt = Now + Lifetime + TimeSpan.FromTicks(1);
+
+        token.Rotate(rotatedAt, Lifetime);
+        var result = token.Rotate(reusedAt, Lifetime);
+
+        Assert.Equal(RotationStatus.ReuseDetected, result.Status);
+        Assert.Equal(rotatedAt, token.UsedAt);
+        Assert.Null(result.Next);
+        Assert.Null(result.NextRawValue);
+    }
+
+    [Fact]
+    public void Rotate_Returns_ReuseDetected_For_A_Used_And_Revoked_Token()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        var rotatedAt = Now + TimeSpan.FromDays(1);
+        var revokedAt = Now + TimeSpan.FromDays(2);
+        var reusedAt = Now + TimeSpan.FromDays(3);
+
+        token.Rotate(rotatedAt, Lifetime);
+        token.Revoke(revokedAt);
+
+        var result = token.Rotate(reusedAt, Lifetime);
+
+        Assert.Equal(RotationStatus.ReuseDetected, result.Status);
+        Assert.Equal(rotatedAt, token.UsedAt);
+        Assert.Null(result.Next);
+        Assert.Null(result.NextRawValue);
+    }
+
+    [Fact]
+    public void Rotate_Returns_Revoked_For_A_Revoked_And_Expired_Token()
+    {
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+
+        var revokedAt = Now + TimeSpan.FromDays(2);
+        var attemptedAt = Now + Lifetime + TimeSpan.FromTicks(1);
+
+        token.Revoke(revokedAt);
+
+        var result = token.Rotate(attemptedAt, Lifetime);
+
+        Assert.Equal(RotationStatus.Revoked, result.Status);
+        Assert.Null(token.UsedAt);
+        Assert.Null(result.Next);
+        Assert.Null(result.NextRawValue);
+    }
 }

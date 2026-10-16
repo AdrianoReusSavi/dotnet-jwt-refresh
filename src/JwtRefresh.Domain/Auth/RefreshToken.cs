@@ -42,10 +42,28 @@ public sealed class RefreshToken
     }
 
     public bool IsActive(DateTimeOffset now)
-        => now < ExpiresAt && UsedAt is null && RevokedAt is null;
+        => !IsExpired(now) && !IsUsed() && !IsRevoked();
+
+    private bool IsExpired(DateTimeOffset now)
+        => ExpiresAt <= now;
+
+    private bool IsUsed()
+        => UsedAt is not null;
+
+    private bool IsRevoked()
+        => RevokedAt is not null;
 
     public RotationResult Rotate(DateTimeOffset now, TimeSpan lifetime)
     {
+        if (IsUsed())
+            return new RotationResult(RotationStatus.ReuseDetected, null, null);
+
+        if (IsRevoked())
+            return new RotationResult(RotationStatus.Revoked, null, null);
+
+        if (IsExpired(now))
+            return new RotationResult(RotationStatus.Expired, null, null);
+
         UsedAt = now;
 
         var (rawValue, tokenHash) = GenerateRawValue();

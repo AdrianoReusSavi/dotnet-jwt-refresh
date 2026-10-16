@@ -68,7 +68,9 @@ public sealed class RefreshToken
 
         var (rawValue, tokenHash) = GenerateRawValue();
 
-        return new RotationResult(RotationStatus.Rotated, new RefreshToken(Guid.NewGuid(), UserId, FamilyId, tokenHash, now, lifetime), rawValue);
+        var next = new RefreshToken(Guid.NewGuid(), UserId, FamilyId, tokenHash, now, lifetime);
+
+        return new RotationResult(RotationStatus.Rotated, next, rawValue);
     }
 
     public void Revoke(DateTimeOffset now)

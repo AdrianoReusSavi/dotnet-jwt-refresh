@@ -8,10 +8,13 @@ public class RefreshTokenTests
     private static readonly DateTimeOffset Now = new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
     private static readonly TimeSpan Lifetime = TimeSpan.FromDays(7);
 
+    private static (RefreshToken Token, string RawValue) IssueToken(Guid? userId = null)
+        => RefreshToken.Issue(userId ?? Guid.NewGuid(), Now, Lifetime);
+
     [Fact]
     public void Issue_Stores_Only_The_Hash_Of_The_Raw_Value()
     {
-        var (token, rawValue) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, rawValue) = IssueToken();
 
         Assert.NotEqual(rawValue, token.TokenHash);
         Assert.Equal(RefreshToken.Hash(rawValue), token.TokenHash);
@@ -20,8 +23,8 @@ public class RefreshTokenTests
     [Fact]
     public void Issue_Returns_Different_Values_On_Each_Call()
     {
-        var (token, rawValue) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
-        var (newToken, newRawValue) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, rawValue) = IssueToken();
+        var (newToken, newRawValue) = IssueToken();
 
         Assert.NotEqual(rawValue, newRawValue);
         Assert.NotEqual(token.TokenHash, newToken.TokenHash);
@@ -30,7 +33,7 @@ public class RefreshTokenTests
     [Fact]
     public void Issue_Raw_Value_Has_At_Least_32_Bytes()
     {
-        var (_, rawValue) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (_, rawValue) = IssueToken();
 
         var bytes = System.Buffers.Text.Base64Url.DecodeFromChars(rawValue.AsSpan());
 
@@ -40,7 +43,7 @@ public class RefreshTokenTests
     [Fact]
     public void Issue_Sets_Expiration_From_Lifetime()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         Assert.Equal(Now + Lifetime, token.ExpiresAt);
     }
@@ -48,10 +51,10 @@ public class RefreshTokenTests
     [Fact]
     public void Issue_Starts_A_New_Family()
     {
-        var id = Guid.NewGuid();
+        var userId = Guid.NewGuid();
 
-        var (token, _) = RefreshToken.Issue(id, Now, Lifetime);
-        var (newToken, _) = RefreshToken.Issue(id, Now, Lifetime);
+        var (token, _) = IssueToken(userId);
+        var (newToken, _) = IssueToken(userId);
 
         Assert.NotEqual(token.FamilyId, newToken.FamilyId);
     }
@@ -61,7 +64,7 @@ public class RefreshTokenTests
     {
         var userId = Guid.NewGuid();
 
-        var (token, _) = RefreshToken.Issue(userId, Now, Lifetime);
+        var (token, _) = IssueToken(userId);
 
         Assert.Equal(userId, token.UserId);
     }
@@ -89,7 +92,7 @@ public class RefreshTokenTests
     [Fact]
     public void IsActive_Returns_True_For_A_New_Token()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         Assert.True(token.IsActive(Now + TimeSpan.FromDays(1)));
     }
@@ -97,7 +100,7 @@ public class RefreshTokenTests
     [Fact]
     public void IsActive_Returns_True_Just_Before_Expiration()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         Assert.True(token.IsActive(Now + Lifetime - TimeSpan.FromTicks(1)));
     }
@@ -105,7 +108,7 @@ public class RefreshTokenTests
     [Fact]
     public void IsActive_Returns_False_After_Expiration()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         Assert.False(token.IsActive(Now + Lifetime + TimeSpan.FromDays(1)));
     }
@@ -113,7 +116,7 @@ public class RefreshTokenTests
     [Fact]
     public void IsActive_Returns_False_At_The_Exact_Expiration_Time()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         Assert.False(token.IsActive(Now + Lifetime));
     }
@@ -121,7 +124,7 @@ public class RefreshTokenTests
     [Fact]
     public void IsActive_Returns_False_After_Revoke()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         token.Revoke(Now + TimeSpan.FromDays(1));
 
@@ -131,7 +134,7 @@ public class RefreshTokenTests
     [Fact]
     public void Revoke_Records_When_It_Happened()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
         var revokedAt = Now + TimeSpan.FromDays(1);
 
         token.Revoke(revokedAt);
@@ -142,7 +145,7 @@ public class RefreshTokenTests
     [Fact]
     public void Revoke_Twice_Keeps_The_First_Revocation_Time()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         var revokedAt = Now + TimeSpan.FromDays(1);
         var newRevokedAt = Now + TimeSpan.FromDays(2);
@@ -156,7 +159,7 @@ public class RefreshTokenTests
     [Fact]
     public void Rotate_Returns_Rotated_For_An_Active_Token()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         var result = token.Rotate(Now + TimeSpan.FromDays(1), Lifetime);
 
@@ -166,7 +169,7 @@ public class RefreshTokenTests
     [Fact]
     public void Rotate_Marks_The_Token_As_Used()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         var rotatedAt = Now + TimeSpan.FromDays(1);
         token.Rotate(rotatedAt, Lifetime);
@@ -177,7 +180,7 @@ public class RefreshTokenTests
     [Fact]
     public void Rotate_Does_Not_Revoke_The_Token()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         var rotatedAt = Now + TimeSpan.FromDays(1);
         token.Rotate(rotatedAt, Lifetime);
@@ -188,7 +191,7 @@ public class RefreshTokenTests
     [Fact]
     public void Rotate_Keeps_The_Same_User_And_Family()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         var result = token.Rotate(Now + TimeSpan.FromDays(1), Lifetime);
         var newToken = result.Next;
@@ -201,7 +204,7 @@ public class RefreshTokenTests
     [Fact]
     public void Rotate_Issues_A_Different_Token()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         var result = token.Rotate(Now + TimeSpan.FromDays(1), Lifetime);
         var newToken = result.Next;
@@ -216,7 +219,7 @@ public class RefreshTokenTests
     [Fact]
     public void Rotate_Starts_The_Next_Token_Lifetime_At_Rotation_Time()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         var rotatedAt = Now + TimeSpan.FromDays(1);
         var result = token.Rotate(rotatedAt, Lifetime);
@@ -230,7 +233,7 @@ public class RefreshTokenTests
     [Fact]
     public void IsActive_Returns_False_After_Rotate()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         var rotatedAt = Now + TimeSpan.FromDays(1);
         token.Rotate(rotatedAt, Lifetime);
@@ -241,7 +244,7 @@ public class RefreshTokenTests
     [Fact]
     public void Rotate_Returns_ReuseDetected_For_A_Used_Token()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         token.Rotate(Now + TimeSpan.FromDays(1), Lifetime);
         var result = token.Rotate(Now + TimeSpan.FromDays(2), Lifetime);
@@ -255,7 +258,7 @@ public class RefreshTokenTests
     [Fact]
     public void Rotate_Returns_Expired_For_An_Expired_Token()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         var rotatedAt = Now + Lifetime + TimeSpan.FromTicks(1);
         var result = token.Rotate(rotatedAt, Lifetime);
@@ -269,7 +272,7 @@ public class RefreshTokenTests
     [Fact]
     public void Rotate_Returns_Revoked_For_A_Revoked_Token()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         token.Revoke(Now + TimeSpan.FromDays(1));
         var result = token.Rotate(Now + TimeSpan.FromDays(2), Lifetime);
@@ -283,7 +286,7 @@ public class RefreshTokenTests
     [Fact]
     public void Rotate_Returns_ReuseDetected_For_A_Used_And_Expired_Token()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         var rotatedAt = Now + TimeSpan.FromDays(1);
         var reusedAt = Now + Lifetime + TimeSpan.FromTicks(1);
@@ -300,7 +303,7 @@ public class RefreshTokenTests
     [Fact]
     public void Rotate_Returns_ReuseDetected_For_A_Used_And_Revoked_Token()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         var rotatedAt = Now + TimeSpan.FromDays(1);
         var revokedAt = Now + TimeSpan.FromDays(2);
@@ -320,7 +323,7 @@ public class RefreshTokenTests
     [Fact]
     public void Rotate_Returns_Revoked_For_A_Revoked_And_Expired_Token()
     {
-        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime);
+        var (token, _) = IssueToken();
 
         var revokedAt = Now + TimeSpan.FromDays(2);
         var attemptedAt = Now + Lifetime + TimeSpan.FromTicks(1);

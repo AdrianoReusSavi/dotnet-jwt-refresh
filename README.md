@@ -1,6 +1,6 @@
 # dotnet-jwt-refresh
 
-JWT refresh token rotation with reuse detection — .NET 9, ASP.NET Core, PostgreSQL, Docker, TDD.
+JWT refresh token rotation with reuse detection — .NET 10, ASP.NET Core, PostgreSQL, Docker, TDD.
 
 > **Status: work in progress.** The domain model is complete and fully tested. Persistence and the HTTP API are the next steps (see [Roadmap](#roadmap)).
 
@@ -43,7 +43,7 @@ docs/adr/                Architecture Decision Records
 
 ## Running the tests
 
-Requires the [.NET 9 SDK](https://dotnet.microsoft.com/download).
+Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
 ```bash
 dotnet test

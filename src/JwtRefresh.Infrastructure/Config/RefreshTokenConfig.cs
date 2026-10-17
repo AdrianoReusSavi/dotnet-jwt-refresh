@@ -10,7 +10,8 @@ public class RefreshTokenConfig : IEntityTypeConfiguration<RefreshToken>
     {
         builder.ToTable("refresh_tokens");
 
-        builder.HasKey(p => p.Id);
+        builder.HasKey(p => p.Id)
+            .HasName("pk_refresh_tokens");
 
         builder.Property(p => p.Id)
             .ValueGeneratedNever()

@@ -17,6 +17,9 @@ public sealed class RefreshToken
     public DateTimeOffset? UsedAt { get; private set; }
     public DateTimeOffset? RevokedAt { get; private set; }
 
+    // Used by EF Core when loading from the database; properties are filled from the columns.
+    private RefreshToken() => TokenHash = null!;
+
     private RefreshToken(Guid id, Guid userId, Guid familyId, string tokenHash, DateTimeOffset createdAt, TimeSpan lifetime, DateTimeOffset sessionExpiresAt)
     {
         var requestedExpiresAt = createdAt + lifetime;

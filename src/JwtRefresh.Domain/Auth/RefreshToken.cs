@@ -13,6 +13,7 @@ public sealed class RefreshToken
     public string TokenHash { get; }
     public DateTimeOffset CreatedAt { get; }
     public DateTimeOffset ExpiresAt { get; }
+    public DateTimeOffset SessionExpiresAt { get; }
     public DateTimeOffset? UsedAt { get; private set; }
     public DateTimeOffset? RevokedAt { get; private set; }
 
@@ -26,7 +27,7 @@ public sealed class RefreshToken
         ExpiresAt = createdAt + lifetime;
     }
 
-    public static (RefreshToken Token, string RawValue) Issue(Guid userId, DateTimeOffset now, TimeSpan lifetime)
+    public static (RefreshToken Token, string RawValue) Issue(Guid userId, DateTimeOffset now, TimeSpan lifetime, TimeSpan sessionLifetime)
     {
         var (rawValue, tokenHash) = GenerateRawValue();
 

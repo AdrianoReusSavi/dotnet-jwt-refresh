@@ -7,9 +7,10 @@ public class RefreshTokenTests
 {
     private static readonly DateTimeOffset Now = new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);
     private static readonly TimeSpan Lifetime = TimeSpan.FromDays(7);
+    private static readonly TimeSpan SessionLifetime = TimeSpan.FromDays(30);
 
     private static (RefreshToken Token, string RawValue) IssueToken(Guid? userId = null)
-        => RefreshToken.Issue(userId ?? Guid.NewGuid(), Now, Lifetime);
+        => RefreshToken.Issue(userId ?? Guid.NewGuid(), Now, Lifetime, SessionLifetime);
 
     [Fact]
     public void Issue_Stores_Only_The_Hash_Of_The_Raw_Value()
@@ -336,5 +337,54 @@ public class RefreshTokenTests
         Assert.Null(token.UsedAt);
         Assert.Null(result.Next);
         Assert.Null(result.NextRawValue);
+    }
+
+    [Fact]
+    public void Issue_Sets_Session_Expiration_From_Session_Lifetime()
+    {
+        var (token, _) = IssueToken();
+
+        Assert.Equal(Now + SessionLifetime, token.SessionExpiresAt);
+    }
+
+    [Fact]
+    public void Rotate_Keeps_The_Session_Expiration()
+    {
+        var (token, _) = IssueToken();
+
+        var result = token.Rotate(Now + TimeSpan.FromDays(1), Lifetime);
+        var newToken = result.Next;
+
+        Assert.NotNull(newToken);
+        Assert.Equal(Now + SessionLifetime, newToken.SessionExpiresAt);
+    }
+
+    [Fact]
+    public void Rotate_Caps_The_Next_Token_At_The_Session_Expiration()
+    {
+        var (token, _) = IssueToken();
+
+        var result = token.Rotate(Now + TimeSpan.FromDays(1), TimeSpan.FromDays(60));
+        var newToken = result.Next;
+
+        Assert.NotNull(newToken);
+        Assert.Equal(Now + SessionLifetime, newToken.ExpiresAt);
+    }
+
+    [Fact]
+    public void Rotate_Returns_Expired_At_The_Session_Expiration()
+    {
+        var (token, _) = IssueToken();
+
+        var result = token.Rotate(Now + TimeSpan.FromDays(1), TimeSpan.FromDays(60));
+        var next = result.Next;
+
+        Assert.NotNull(next);
+
+        var resultRotated = next.Rotate(Now + SessionLifetime, Lifetime);
+
+        Assert.Equal(RotationStatus.Expired, resultRotated.Status);
+        Assert.Null(resultRotated.Next);
+        Assert.Null(resultRotated.NextRawValue);
     }
 }

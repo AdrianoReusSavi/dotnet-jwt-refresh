@@ -17,21 +17,26 @@ public sealed class RefreshToken
     public DateTimeOffset? UsedAt { get; private set; }
     public DateTimeOffset? RevokedAt { get; private set; }
 
-    private RefreshToken(Guid id, Guid userId, Guid familyId, string tokenHash, DateTimeOffset createdAt, TimeSpan lifetime)
+    private RefreshToken(Guid id, Guid userId, Guid familyId, string tokenHash, DateTimeOffset createdAt, TimeSpan lifetime, DateTimeOffset sessionExpiresAt)
     {
+        var requestedExpiresAt = createdAt + lifetime;
+
         Id = id;
         UserId = userId;
         FamilyId = familyId;
         TokenHash = tokenHash;
         CreatedAt = createdAt;
-        ExpiresAt = createdAt + lifetime;
+        ExpiresAt = Earliest(requestedExpiresAt, sessionExpiresAt);
+        SessionExpiresAt = sessionExpiresAt;
     }
 
     public static (RefreshToken Token, string RawValue) Issue(Guid userId, DateTimeOffset now, TimeSpan lifetime, TimeSpan sessionLifetime)
     {
         var (rawValue, tokenHash) = GenerateRawValue();
 
-        return (new RefreshToken(Guid.NewGuid(), userId, Guid.NewGuid(), tokenHash, now, lifetime), rawValue);
+        var sessionExpiresAt = now + sessionLifetime;
+
+        return (new RefreshToken(Guid.NewGuid(), userId, Guid.NewGuid(), tokenHash, now, lifetime, sessionExpiresAt), rawValue);
     }
 
     public static string Hash(string rawValue)
@@ -69,7 +74,7 @@ public sealed class RefreshToken
 
         var (rawValue, tokenHash) = GenerateRawValue();
 
-        var next = new RefreshToken(Guid.NewGuid(), UserId, FamilyId, tokenHash, now, lifetime);
+        var next = new RefreshToken(Guid.NewGuid(), UserId, FamilyId, tokenHash, now, lifetime, SessionExpiresAt);
 
         return new RotationResult(RotationStatus.Rotated, next, rawValue);
     }
@@ -83,4 +88,7 @@ public sealed class RefreshToken
         var rawValue = Base64Url.EncodeToString(bytes);
         return (rawValue, Hash(rawValue));
     }
+
+    private static DateTimeOffset Earliest(DateTimeOffset a, DateTimeOffset b)
+        => a < b ? a : b;
 }

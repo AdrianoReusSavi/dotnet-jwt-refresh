@@ -6,6 +6,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 WORKDIR /src
 COPY ["src/JwtRefresh.Api/JwtRefresh.Api.csproj", "src/JwtRefresh.Api/"]
 COPY ["src/JwtRefresh.Domain/JwtRefresh.Domain.csproj", "src/JwtRefresh.Domain/"]
+COPY ["src/JwtRefresh.Infrastructure/JwtRefresh.Infrastructure.csproj", "src/JwtRefresh.Infrastructure/"]
 RUN dotnet restore "src/JwtRefresh.Api/JwtRefresh.Api.csproj"
 COPY . .
 RUN dotnet publish "src/JwtRefresh.Api/JwtRefresh.Api.csproj" -c Release -o /app/publish --no-restore

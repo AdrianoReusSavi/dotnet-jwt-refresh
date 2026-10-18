@@ -48,5 +48,8 @@ public class RefreshTokenConfig : IEntityTypeConfiguration<RefreshToken>
 
         builder.Property(p => p.RevokedAt)
             .HasColumnName("revoked_at");
+
+        builder.Property<uint>("xmin")
+            .IsRowVersion();
     }
 }

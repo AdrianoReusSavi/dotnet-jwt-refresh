@@ -25,4 +25,5 @@ It is also necessary to decide what happens when more than one reason applies at
 
 - **Positive:** the system tells an attack apart from a logout, and each token's history is preserved for investigation. The behavior for every combination of states is defined and covered by tests.
 - **Negative and caveats:** the table grows, because used tokens are kept. A periodic cleanup of tokens from sessions that have already ended will be needed.
+- **Amended by [ADR 4](0004-optimistic-concurrency-with-xmin.md):** concurrent revokes conflict at the database; the application layer retries so the caller still never sees an error.
 - **Pending:** the domain only **signals** reuse. The reaction (revoking every token in the family) belongs to the application layer, in the next step.

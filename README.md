@@ -2,7 +2,7 @@
 
 JWT refresh token rotation with reuse detection — .NET 10, ASP.NET Core, PostgreSQL, Docker, TDD.
 
-> **Status: work in progress.** The domain model and the persistence layer (EF Core + PostgreSQL) are complete and tested. Concurrent refresh handling and family revocation are the next steps (see [Roadmap](#roadmap)).
+> **Status: work in progress.** The domain model and the persistence layer (EF Core + PostgreSQL) are complete and tested, including concurrent refreshes. Family revocation and the HTTP endpoints are the next steps (see [Roadmap](#roadmap)).
 
 ## How it works
 
@@ -28,6 +28,7 @@ The reasoning behind the main choices is recorded as Architecture Decision Recor
 1. [SHA-256 for refresh token hashes](docs/adr/0001-sha256-for-refresh-token-hashes.md) — why not BCrypt, and why SHA-256 is safe for tokens but not for passwords.
 2. [Separate used and revoked markers, with reuse taking precedence](docs/adr/0002-separate-used-and-revoked-markers.md) — how an attack is told apart from a logout.
 3. [Absolute session lifetime](docs/adr/0003-absolute-session-lifetime.md) — why a stolen token cannot keep a session alive forever.
+4. [Optimistic concurrency with xmin](docs/adr/0004-optimistic-concurrency-with-xmin.md) — how two requests with the same token are kept from forking a family.
 
 ## Project structure
 
@@ -73,7 +74,7 @@ The connection string for development is in `src/JwtRefresh.Api/appsettings.Deve
 - [x] Reuse detection and status precedence
 - [x] Absolute session lifetime
 - [x] Persistence with EF Core and PostgreSQL
-- [ ] Concurrent refresh handling (two requests with the same token)
+- [x] Concurrent refresh handling (two requests with the same token)
 - [ ] Family revocation on reuse detection
 - [ ] Endpoints: register, login, refresh, logout
 - [ ] Integration tests with `WebApplicationFactory` and Testcontainers

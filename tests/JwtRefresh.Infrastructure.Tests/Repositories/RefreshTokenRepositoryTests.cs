@@ -243,4 +243,60 @@ public class RefreshTokenRepositoryTests(PostgreSqlFixture fixture) : IClassFixt
             item => Assert.Equal(firstRotatedToken.Id, item.Id)
         );
     }
+
+    [Fact]
+    public async Task Rotate_Is_Rejected_When_The_Token_Was_Revoked_Concurrently()
+    {
+        await using var setupContext = fixture.CreateContext();
+        await using var firstContext = fixture.CreateContext();
+        await using var secondContext = fixture.CreateContext();
+        await using var readContext = fixture.CreateContext();
+
+        var setupRepository = new RefreshTokenRepository(setupContext);
+        var setupUnitOfWork = new UnitOfWork(setupContext);
+
+        var firstRepository = new RefreshTokenRepository(firstContext);
+        var firstUnitOfWork = new UnitOfWork(firstContext);
+
+        var secondRepository = new RefreshTokenRepository(secondContext);
+        var secondUnitOfWork = new UnitOfWork(secondContext);
+
+        var readRepository = new RefreshTokenRepository(readContext);
+
+        var (token, _) = IssueToken();
+
+        setupRepository.Add(token);
+
+        await setupUnitOfWork.CommitAsync();
+
+        var firstContextToken = await firstRepository.GetByHashAsync(token.TokenHash);
+        var secondContextToken = await secondRepository.GetByHashAsync(token.TokenHash);
+
+        Assert.NotNull(firstContextToken);
+        Assert.NotNull(secondContextToken);
+
+        var revokedAt = Now + TimeSpan.FromDays(1);
+        firstContextToken.Revoke(revokedAt);
+
+        var rotatedAt = Now + TimeSpan.FromDays(1);
+        var (secondRotatedStatus, secondRotatedToken, _) = secondContextToken.Rotate(rotatedAt, Lifetime);
+
+        Assert.NotNull(secondRotatedToken);
+        Assert.Equal(RotationStatus.Rotated, secondRotatedStatus);
+
+        secondRepository.Add(secondRotatedToken);
+
+        await firstUnitOfWork.CommitAsync();
+
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(
+            async () => await secondUnitOfWork.CommitAsync()
+        );
+
+        var tokens = await readRepository.GetByFamilyIdAsync(token.FamilyId);
+
+        var revokedToken = Assert.Single(tokens);
+
+        Assert.Null(revokedToken.UsedAt);
+        Assert.Equal(revokedAt, revokedToken.RevokedAt);
+    }
 }

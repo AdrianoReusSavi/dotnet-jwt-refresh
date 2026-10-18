@@ -2,7 +2,7 @@
 
 JWT refresh token rotation with reuse detection — .NET 10, ASP.NET Core, PostgreSQL, Docker, TDD.
 
-> **Status: work in progress.** The domain model is complete and fully tested. Persistence and the HTTP API are the next steps (see [Roadmap](#roadmap)).
+> **Status: work in progress.** The domain model and the persistence layer (EF Core + PostgreSQL) are complete and tested. Concurrent refresh handling and family revocation are the next steps (see [Roadmap](#roadmap)).
 
 ## How it works
 
@@ -31,19 +31,22 @@ The reasoning behind the main choices is recorded as Architecture Decision Recor
 
 ## Project structure
 
-```
+```text
 src/
-  JwtRefresh.Domain/     RefreshToken, PasswordHasher (no framework dependencies)
-  JwtRefresh.Api/        ASP.NET Core API (in progress)
+  JwtRefresh.Domain/                  RefreshToken, PasswordHasher (no framework dependencies)
+  JwtRefresh.Application/             repository and unit of work interfaces
+  JwtRefresh.Infrastructure/          EF Core mapping, migrations and repositories (PostgreSQL)
+  JwtRefresh.Api/                     ASP.NET Core API (in progress)
 tests/
   JwtRefresh.Domain.Tests/            unit tests (xUnit)
+  JwtRefresh.Infrastructure.Tests/    repository tests against PostgreSQL (Testcontainers)
   JwtRefresh.Api.IntegrationTests/    integration tests (in progress)
-docs/adr/                Architecture Decision Records
+docs/adr/                             Architecture Decision Records
 ```
 
 ## Running the tests
 
-Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download).
+Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download) and Docker (or Podman) running. The infrastructure tests start a disposable PostgreSQL container with [Testcontainers](https://dotnet.testcontainers.org/).
 
 ```bash
 dotnet test
@@ -51,15 +54,27 @@ dotnet test
 
 The domain was built test-first: every behavior went through a failing test before the implementation, and the commit history keeps each RED → GREEN → REFACTOR step.
 
+## Running locally
+
+Start the database and apply the migrations:
+
+```bash
+docker compose up -d postgres
+dotnet tool install --global dotnet-ef
+dotnet ef database update --project src/JwtRefresh.Infrastructure --startup-project src/JwtRefresh.Api
+```
+
+The connection string for development is in `src/JwtRefresh.Api/appsettings.Development.json`.
+
 ## Roadmap
 
 - [x] Password hashing (BCrypt)
 - [x] Refresh token issuing, hashing, rotation and revocation
 - [x] Reuse detection and status precedence
 - [x] Absolute session lifetime
-- [ ] Persistence with EF Core and PostgreSQL
-- [ ] Family revocation on reuse detection
+- [x] Persistence with EF Core and PostgreSQL
 - [ ] Concurrent refresh handling (two requests with the same token)
+- [ ] Family revocation on reuse detection
 - [ ] Endpoints: register, login, refresh, logout
 - [ ] Integration tests with `WebApplicationFactory` and Testcontainers
 - [ ] ProblemDetails, structured logging and rate limiting

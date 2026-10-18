@@ -186,4 +186,61 @@ public class RefreshTokenRepositoryTests(PostgreSqlFixture fixture) : IClassFixt
         );
         Assert.DoesNotContain(tokens, t => t.Id == anotherToken.Id);
     }
+
+    [Fact]
+    public async Task Concurrent_Rotation_Of_The_Same_Token_Is_Rejected_On_Second_Commit()
+    {
+        await using var setupContext = fixture.CreateContext();
+        await using var firstContext = fixture.CreateContext();
+        await using var secondContext = fixture.CreateContext();
+        await using var readContext = fixture.CreateContext();
+
+        var setupRepository = new RefreshTokenRepository(setupContext);
+        var setupUnitOfWork = new UnitOfWork(setupContext);
+
+        var firstRepository = new RefreshTokenRepository(firstContext);
+        var firstUnitOfWork = new UnitOfWork(firstContext);
+
+        var secondRepository = new RefreshTokenRepository(secondContext);
+        var secondUnitOfWork = new UnitOfWork(secondContext);
+
+        var readRepository = new RefreshTokenRepository(readContext);
+
+        var (token, _) = IssueToken();
+
+        setupRepository.Add(token);
+
+        await setupUnitOfWork.CommitAsync();
+
+        var firstContextToken = await firstRepository.GetByHashAsync(token.TokenHash);
+        var secondContextToken = await secondRepository.GetByHashAsync(token.TokenHash);
+
+        Assert.NotNull(firstContextToken);
+        Assert.NotNull(secondContextToken);
+
+        var rotatedAt = Now + TimeSpan.FromDays(1);
+        var (firstRotatedStatus, firstRotatedToken, _) = firstContextToken.Rotate(rotatedAt, Lifetime);
+        var (secondRotatedStatus, secondRotatedToken, _) = secondContextToken.Rotate(rotatedAt, Lifetime);
+
+        Assert.NotNull(firstRotatedToken);
+        Assert.Equal(RotationStatus.Rotated, firstRotatedStatus);
+        Assert.NotNull(secondRotatedToken);
+        Assert.Equal(RotationStatus.Rotated, secondRotatedStatus);
+
+        firstRepository.Add(firstRotatedToken);
+        secondRepository.Add(secondRotatedToken);
+
+        await firstUnitOfWork.CommitAsync();
+
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(
+            async () => await secondUnitOfWork.CommitAsync()
+        );
+
+        var tokens = await readRepository.GetByFamilyIdAsync(token.FamilyId);
+
+        Assert.Collection(tokens.OrderBy(t => t.CreatedAt),
+            item => Assert.Equal(token.Id, item.Id),
+            item => Assert.Equal(firstRotatedToken.Id, item.Id)
+        );
+    }
 }

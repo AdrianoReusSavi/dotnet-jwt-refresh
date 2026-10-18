@@ -8,5 +8,6 @@
   <Folder Name="/tests/">
     <Project Path="tests/JwtRefresh.Api.IntegrationTests/JwtRefresh.Api.IntegrationTests.csproj" />
     <Project Path="tests/JwtRefresh.Domain.Tests/JwtRefresh.Domain.Tests.csproj" />
+    <Project Path="tests/JwtRefresh.Infrastructure.Tests/JwtRefresh.Infrastructure.Tests.csproj" />
   </Folder>
 </Solution>

@@ -1,6 +1,7 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/JwtRefresh.Api/JwtRefresh.Api.csproj" />
+    <Project Path="src/JwtRefresh.Application/JwtRefresh.Application.csproj" />
     <Project Path="src/JwtRefresh.Domain/JwtRefresh.Domain.csproj" />
     <Project Path="src/JwtRefresh.Infrastructure/JwtRefresh.Infrastructure.csproj" />
   </Folder>

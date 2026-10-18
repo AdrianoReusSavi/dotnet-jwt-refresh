@@ -15,6 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\JwtRefresh.Application\JwtRefresh.Application.csproj" />
     <ProjectReference Include="..\JwtRefresh.Infrastructure\JwtRefresh.Infrastructure.csproj" />
   </ItemGroup>
 

@@ -145,4 +145,53 @@ public class RefreshTokenServiceTests
 
         Assert.Equal(1, _unitOfWork.CommitCount);
     }
+
+    [Fact]
+    public async Task RefreshAsync_Returns_Expired_For_An_Expired_Token()
+    {
+        var (token, rawValue) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime, SessionLifetime);
+
+        _repository.Add(token);
+
+        _timeProvider.Advance(Lifetime + TimeSpan.FromSeconds(1));
+
+        var result = await _service.RefreshAsync(rawValue);
+
+        Assert.Equal(RefreshStatus.Expired, result.Status);
+        Assert.Null(result.RawValue);
+        Assert.Equal(0, _unitOfWork.CommitCount);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Returns_Revoked_For_A_Revoked_Token()
+    {
+        var (token, rawValue) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime, SessionLifetime);
+
+        _repository.Add(token);
+
+        token.Revoke(Now);
+
+        var result = await _service.RefreshAsync(rawValue);
+
+        Assert.Equal(RefreshStatus.Revoked, result.Status);
+        Assert.Null(result.RawValue);
+        Assert.Equal(0, _unitOfWork.CommitCount);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Does_Not_Store_A_Successor_When_Refused()
+    {
+        var (token, rawValue) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime, SessionLifetime);
+
+        _repository.Add(token);
+
+        token.Revoke(Now);
+
+        await _service.RefreshAsync(rawValue);
+
+        var tokens = await _repository.GetByFamilyIdAsync(token.FamilyId);
+
+        var stored = Assert.Single(tokens);
+        Assert.Equal(token.Id, stored.Id);
+    }
 }

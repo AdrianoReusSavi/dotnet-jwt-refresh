@@ -23,4 +23,9 @@ public class RefreshTokenService(
 
         return rawValue;
     }
+
+    public async Task<RefreshResult> RefreshAsync(string rawValue, CancellationToken cancellationToken = default)
+    {
+        throw new NotImplementedException();
+    }
 }

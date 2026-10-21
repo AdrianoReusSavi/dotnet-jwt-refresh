@@ -1,4 +1,5 @@
 using JwtRefresh.Application.Auth;
+using JwtRefresh.Application.Enums;
 using JwtRefresh.Application.Services;
 using JwtRefresh.Application.Tests.Fakes;
 using JwtRefresh.Domain.Auth;
@@ -66,6 +67,81 @@ public class RefreshTokenServiceTests
     public async Task IssueAsync_Commits_Once()
     {
         await _service.IssueAsync(Guid.NewGuid());
+
+        Assert.Equal(1, _unitOfWork.CommitCount);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Returns_NotFound_For_An_Unknown_Token()
+    {
+        var (_, rawValue) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime, SessionLifetime);
+
+        var result = await _service.RefreshAsync(rawValue);
+
+        Assert.Equal(RefreshStatus.NotFound, result.Status);
+        Assert.Null(result.RawValue);
+        Assert.Equal(0, _unitOfWork.CommitCount);
+    }
+    
+    [Fact]
+    public async Task RefreshAsync_Returns_A_New_Raw_Value_For_The_Same_User()
+    {
+        var userId = Guid.NewGuid();
+        var (token, rawValue) = RefreshToken.Issue(userId, Now, Lifetime, SessionLifetime);
+
+        _repository.Add(token);
+
+        var result = await _service.RefreshAsync(rawValue);
+
+        Assert.Equal(RefreshStatus.Refreshed, result.Status);
+        Assert.Equal(userId, result.UserId);
+        Assert.NotNull(result.RawValue);
+        Assert.NotEqual(rawValue, result.RawValue);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Marks_The_Presented_Token_As_Used()
+    {
+        var userId = Guid.NewGuid();
+        var (token, rawValue) = RefreshToken.Issue(userId, Now, Lifetime, SessionLifetime);
+
+        _repository.Add(token);
+
+        var refreshedAt = Now + TimeSpan.FromDays(1);
+
+        _timeProvider.Advance(refreshedAt - Now);
+
+        await _service.RefreshAsync(rawValue);
+
+        var storedToken = await _repository.GetByHashAsync(token.TokenHash);
+
+        Assert.NotNull(storedToken);
+        Assert.Equal(refreshedAt, storedToken.UsedAt);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Stores_The_Successor_In_The_Same_Family()
+    {
+        var (token, rawValue) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime, SessionLifetime);
+
+        _repository.Add(token);
+
+        var result = await _service.RefreshAsync(rawValue);
+
+        var tokens = await _repository.GetByFamilyIdAsync(token.FamilyId);
+
+        var successor = Assert.Single(tokens, s => s.Id != token.Id);
+        Assert.Equal(RefreshToken.Hash(result.RawValue!), successor.TokenHash);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Commits_Once()
+    {
+        var (token, rawValue) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime, SessionLifetime);
+
+        _repository.Add(token);
+
+        await _service.RefreshAsync(rawValue);
 
         Assert.Equal(1, _unitOfWork.CommitCount);
     }

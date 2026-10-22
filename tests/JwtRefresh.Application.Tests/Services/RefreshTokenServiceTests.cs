@@ -19,6 +19,21 @@ public class RefreshTokenServiceTests
     private readonly FakeTimeProvider _timeProvider = new(Now);
     private readonly RefreshTokenService _service;
 
+    private async Task<(RefreshToken First, string FirstRawValue, string SecondRawValue)> IssueAndRotateAsync()
+    {
+        var (token, rawValue) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime, SessionLifetime);
+
+        _repository.Add(token);
+
+        _timeProvider.Advance(TimeSpan.FromDays(1));
+
+        var tokenRefresh = await _service.RefreshAsync(rawValue);
+
+        _timeProvider.Advance(TimeSpan.FromDays(1));
+
+        return (token, rawValue, tokenRefresh.RawValue!);
+    }
+
     public RefreshTokenServiceTests()
     {
         var options = Options.Create(new RefreshTokenOptions
@@ -193,5 +208,70 @@ public class RefreshTokenServiceTests
 
         var stored = Assert.Single(tokens);
         Assert.Equal(token.Id, stored.Id);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Returns_ReuseDetected_When_A_Used_Token_Is_Presented_Again()
+    {
+        var (_, rawValue, _) = await IssueAndRotateAsync();
+
+        var result = await _service.RefreshAsync(rawValue);
+
+        Assert.Equal(RefreshStatus.ReuseDetected, result.Status);
+        Assert.Null(result.RawValue);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Revokes_The_Whole_Family_On_Reuse()
+    {
+        var (token, rawValue, _) = await IssueAndRotateAsync();
+
+        await _service.RefreshAsync(rawValue);
+
+        var storedTokens = await _repository.GetByFamilyIdAsync(token.FamilyId);
+
+        Assert.Collection(storedTokens.OrderBy(t => t.CreatedAt),
+            item => Assert.Equal(_timeProvider.GetUtcNow(), item.RevokedAt),
+            item => Assert.Equal(_timeProvider.GetUtcNow(), item.RevokedAt)
+        );
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Successor_Cannot_Refresh_After_Reuse()
+    {
+        var (_, rawValue, secondRawValue) = await IssueAndRotateAsync();
+
+        await _service.RefreshAsync(rawValue);
+
+        var result = await _service.RefreshAsync(secondRawValue);
+
+        Assert.Equal(RefreshStatus.Revoked, result.Status);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Does_Not_Revoke_Other_Families_On_Reuse()
+    {
+        var (_, rawValue, _) = await IssueAndRotateAsync();
+
+        var (otherToken, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime, SessionLifetime);
+
+        _repository.Add(otherToken);
+
+        await _service.RefreshAsync(rawValue);
+
+        var storedTokensOtherFamily = await _repository.GetByFamilyIdAsync(otherToken.FamilyId);
+
+        var storedToken = Assert.Single(storedTokensOtherFamily);
+        Assert.Null(storedToken.RevokedAt);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Commits_The_Family_Revocation()
+    {
+        var (_, rawValue, _) = await IssueAndRotateAsync();
+
+        await _service.RefreshAsync(rawValue);
+
+        Assert.Equal(2, _unitOfWork.CommitCount);
     }
 }

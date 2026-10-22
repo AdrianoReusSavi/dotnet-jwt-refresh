@@ -33,7 +33,19 @@ public class RefreshTokenService(
         if (token is null)
             return new RefreshResult(RefreshStatus.NotFound, null, null);
 
-        var result = token.Rotate(timeProvider.GetUtcNow(), options.Value.Lifetime);
+        var now = timeProvider.GetUtcNow();
+        var result = token.Rotate(now, options.Value.Lifetime);
+
+        if (result.Status == RotationStatus.ReuseDetected)
+        {
+            var family = await repository.GetByFamilyIdAsync(token.FamilyId, cancellationToken);
+            foreach (var storedToken in family)
+                storedToken.Revoke(now);
+
+            await uow.CommitAsync(cancellationToken);
+
+            return new RefreshResult(RefreshStatus.ReuseDetected, null, null);
+        }
 
         if (result.Next is not { } successor)
             return new RefreshResult(ToRefreshStatus(result.Status), null, null);
@@ -49,7 +61,6 @@ public class RefreshTokenService(
     {
         RotationStatus.Expired => RefreshStatus.Expired,
         RotationStatus.Revoked => RefreshStatus.Revoked,
-        RotationStatus.ReuseDetected => throw new NotImplementedException(),
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null),
     };
 }

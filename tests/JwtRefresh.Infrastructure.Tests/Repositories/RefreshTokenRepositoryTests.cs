@@ -1,3 +1,4 @@
+using JwtRefresh.Application.Exceptions;
 using JwtRefresh.Domain.Auth;
 using JwtRefresh.Domain.Enums;
 using JwtRefresh.Infrastructure.Repositories;
@@ -232,9 +233,11 @@ public class RefreshTokenRepositoryTests(PostgreSqlFixture fixture) : IClassFixt
 
         await firstUnitOfWork.CommitAsync();
 
-        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(
+        var exception = await Assert.ThrowsAsync<ConcurrencyConflictException>(
             async () => await secondUnitOfWork.CommitAsync()
         );
+
+        Assert.IsType<DbUpdateConcurrencyException>(exception.InnerException);
 
         var tokens = await readRepository.GetByFamilyIdAsync(token.FamilyId);
 
@@ -288,9 +291,11 @@ public class RefreshTokenRepositoryTests(PostgreSqlFixture fixture) : IClassFixt
 
         await firstUnitOfWork.CommitAsync();
 
-        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(
+        var exception = await Assert.ThrowsAsync<ConcurrencyConflictException>(
             async () => await secondUnitOfWork.CommitAsync()
         );
+
+        Assert.IsType<DbUpdateConcurrencyException>(exception.InnerException);
 
         var tokens = await readRepository.GetByFamilyIdAsync(token.FamilyId);
 

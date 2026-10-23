@@ -274,4 +274,20 @@ public class RefreshTokenServiceTests
 
         Assert.Equal(2, _unitOfWork.CommitCount);
     }
+
+    [Fact]
+    public async Task RefreshAsync_Returns_Conflict_When_The_Commit_Conflicts()
+    {
+        var (token, rawValue) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime, SessionLifetime);
+
+        _repository.Add(token);
+
+        _unitOfWork.ConflictOnNextCommit = true;
+
+        var result = await _service.RefreshAsync(rawValue);
+
+        Assert.Equal(RefreshStatus.Conflict, result.Status);
+        Assert.Null(result.RawValue);
+        Assert.Null(result.UserId);
+    }
 }

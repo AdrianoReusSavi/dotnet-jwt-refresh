@@ -20,4 +20,7 @@ public class UnitOfWork(DataContext context) : IUnitOfWork
             throw new ConcurrencyConflictException("The data was modified by another operation since it was loaded.", ex);
         }
     }
+
+    public void DiscardChanges()
+        => _context.ChangeTracker.Clear();
 }

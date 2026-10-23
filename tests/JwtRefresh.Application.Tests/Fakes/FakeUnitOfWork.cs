@@ -6,13 +6,14 @@ namespace JwtRefresh.Application.Tests.Fakes;
 public class FakeUnitOfWork : IUnitOfWork
 {
     public int CommitCount { get; private set; }
-    public bool ConflictOnNextCommit { get; set; }
+    public int PendingConflicts { get; set; }
+    public int DiscardCount { get; private set; }
 
     public Task CommitAsync(CancellationToken cancellationToken = default)
     {
-        if (ConflictOnNextCommit)
+        if (PendingConflicts > 0)
         {
-            ConflictOnNextCommit = false;
+            PendingConflicts--;
 
             throw new ConcurrencyConflictException("Simulated concurrency conflict.");
         }
@@ -21,4 +22,7 @@ public class FakeUnitOfWork : IUnitOfWork
 
         return Task.CompletedTask;
     }
+
+    public void DiscardChanges()
+        => DiscardCount++;
 }

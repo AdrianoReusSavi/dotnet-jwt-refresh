@@ -282,7 +282,7 @@ public class RefreshTokenServiceTests
 
         _repository.Add(token);
 
-        _unitOfWork.ConflictOnNextCommit = true;
+        _unitOfWork.PendingConflicts = 1;
 
         var result = await _service.RefreshAsync(rawValue);
 

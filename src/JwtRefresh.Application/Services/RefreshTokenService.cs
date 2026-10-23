@@ -1,5 +1,6 @@
 using JwtRefresh.Application.Auth;
 using JwtRefresh.Application.Enums;
+using JwtRefresh.Application.Exceptions;
 using JwtRefresh.Application.Interfaces.Repository;
 using JwtRefresh.Application.Interfaces.Service;
 using JwtRefresh.Domain.Auth;
@@ -52,7 +53,14 @@ public class RefreshTokenService(
 
         repository.Add(successor);
 
-        await uow.CommitAsync(cancellationToken);
+        try
+        {
+            await uow.CommitAsync(cancellationToken);
+        }
+        catch (ConcurrencyConflictException)
+        {
+            return new RefreshResult(RefreshStatus.Conflict, null, null);
+        }
 
         return new RefreshResult(RefreshStatus.Refreshed, result.NextRawValue, token.UserId);
     }

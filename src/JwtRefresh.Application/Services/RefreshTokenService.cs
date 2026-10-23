@@ -16,6 +16,8 @@ public class RefreshTokenService(
         IOptions<RefreshTokenOptions> options
     ) : IRefreshTokenService
 {
+    private const int MaxRevocationAttempts = 3;
+
     public async Task<string> IssueAsync(Guid userId, CancellationToken cancellationToken = default)
     {
         var (token, rawValue) = RefreshToken.Issue(userId, timeProvider.GetUtcNow(), options.Value.Lifetime, options.Value.SessionLifetime);
@@ -39,11 +41,7 @@ public class RefreshTokenService(
 
         if (result.Status == RotationStatus.ReuseDetected)
         {
-            var family = await repository.GetByFamilyIdAsync(token.FamilyId, cancellationToken);
-            foreach (var storedToken in family)
-                storedToken.Revoke(now);
-
-            await uow.CommitAsync(cancellationToken);
+            await RevokeFamilyAsync(token.FamilyId, now, cancellationToken);
 
             return new RefreshResult(RefreshStatus.ReuseDetected, null, null);
         }
@@ -71,4 +69,25 @@ public class RefreshTokenService(
         RotationStatus.Revoked => RefreshStatus.Revoked,
         _ => throw new ArgumentOutOfRangeException(nameof(status), status, null),
     };
+
+    private async Task RevokeFamilyAsync(Guid familyId, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            var family = await repository.GetByFamilyIdAsync(familyId, cancellationToken);
+            foreach (var storedToken in family)
+                storedToken.Revoke(now);
+
+            try
+            {
+                await uow.CommitAsync(cancellationToken);
+
+                return;
+            }
+            catch (ConcurrencyConflictException) when (attempt < MaxRevocationAttempts)
+            {
+                uow.DiscardChanges();
+            }
+        }
+    }
 }

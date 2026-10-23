@@ -1,5 +1,6 @@
 using JwtRefresh.Application.Auth;
 using JwtRefresh.Application.Enums;
+using JwtRefresh.Application.Exceptions;
 using JwtRefresh.Application.Services;
 using JwtRefresh.Application.Tests.Fakes;
 using JwtRefresh.Domain.Auth;
@@ -289,5 +290,31 @@ public class RefreshTokenServiceTests
         Assert.Equal(RefreshStatus.Conflict, result.Status);
         Assert.Null(result.RawValue);
         Assert.Null(result.UserId);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Retries_The_Family_Revocation_On_Conflict()
+    {
+        var (_, rawValue, _) = await IssueAndRotateAsync();
+
+        _unitOfWork.PendingConflicts = 1;
+
+        var result = await _service.RefreshAsync(rawValue);
+
+        Assert.Equal(RefreshStatus.ReuseDetected, result.Status);
+        Assert.Equal(2, _unitOfWork.CommitCount);
+        Assert.Equal(1, _unitOfWork.DiscardCount);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Throws_When_The_Family_Revocation_Keeps_Conflicting()
+    {
+        var (_, rawValue, _) = await IssueAndRotateAsync();
+
+        _unitOfWork.PendingConflicts = 3;
+
+        await Assert.ThrowsAsync<ConcurrencyConflictException>(
+            async () => await _service.RefreshAsync(rawValue)
+        );
     }
 }

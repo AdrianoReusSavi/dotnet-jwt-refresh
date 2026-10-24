@@ -23,11 +23,16 @@ public sealed class User
     }
 
     public static User Register(string email, string password, DateTimeOffset now)
-        => throw new NotImplementedException();
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(email);
+        ArgumentException.ThrowIfNullOrWhiteSpace(password);
+
+        return new User(Guid.NewGuid(), NormalizeEmail(email), PasswordHasher.Hash(password), now);
+    }
 
     public static string NormalizeEmail(string email)
-        => throw new NotImplementedException();
+        => email.Trim().ToLowerInvariant();
 
     public bool VerifyPassword(string password)
-        => throw new NotImplementedException();
+        => PasswordHasher.Verify(password, PasswordHash);
 }

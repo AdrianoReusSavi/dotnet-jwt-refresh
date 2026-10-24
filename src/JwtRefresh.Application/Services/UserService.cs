@@ -12,6 +12,10 @@ public class UserService(
         TimeProvider timeProvider
     ) : IUserService
 {
+    // Verified when the email is unknown, so both failure paths spend the same BCrypt time
+    // and the response time does not reveal which emails are registered.
+    private static readonly string DummyPasswordHash = PasswordHasher.Hash("dummy-password-for-timing");
+
     public async Task<RegisterResult> RegisterAsync(string email, string password, CancellationToken cancellationToken = default)
     {
         var existingUser = await repository.GetByEmailAsync(email, cancellationToken);
@@ -28,6 +32,20 @@ public class UserService(
         return new RegisterResult(RegisterStatus.Registered, user.Id);
     }
 
-    public Task<LoginResult> LoginAsync(string email, string password, CancellationToken cancellationToken = default)
-        => throw new NotImplementedException();
+    public async Task<LoginResult> LoginAsync(string email, string password, CancellationToken cancellationToken = default)
+    {
+        var user = await repository.GetByEmailAsync(email, cancellationToken);
+
+        if (user is null)
+        {
+            PasswordHasher.Verify(password, DummyPasswordHash);
+
+            return new LoginResult(LoginStatus.InvalidCredentials, null);
+        }
+
+        if (!user.VerifyPassword(password))
+            return new LoginResult(LoginStatus.InvalidCredentials, null);
+
+        return new LoginResult(LoginStatus.Succeeded, user.Id);
+    }
 }

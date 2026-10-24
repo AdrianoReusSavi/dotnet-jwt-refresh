@@ -59,6 +59,19 @@ public class UserServiceTests
     }
 
     [Fact]
+    public async Task RegisterAsync_Returns_EmailTaken_When_The_Email_Is_Taken_Concurrently()
+    {
+        var email = GenerateEmail();
+
+        _unitOfWork.PendingUniqueViolations = 1;
+
+        var result = await _service.RegisterAsync(email, Password);
+
+        Assert.Equal(new RegisterResult(RegisterStatus.EmailTaken, null), result);
+        Assert.Equal(0, _unitOfWork.CommitCount);
+    }
+
+    [Fact]
     public async Task LoginAsync_Succeeds_With_The_Correct_Password()
     {
         var email = GenerateEmail();

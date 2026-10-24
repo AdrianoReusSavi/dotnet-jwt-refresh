@@ -7,6 +7,7 @@ public class FakeUnitOfWork : IUnitOfWork
 {
     public int CommitCount { get; private set; }
     public int PendingConflicts { get; set; }
+    public int PendingUniqueViolations { get; set; }
     public int DiscardCount { get; private set; }
 
     public Task CommitAsync(CancellationToken cancellationToken = default)
@@ -16,6 +17,13 @@ public class FakeUnitOfWork : IUnitOfWork
             PendingConflicts--;
 
             throw new ConcurrencyConflictException("Simulated concurrency conflict.");
+        }
+
+        if (PendingUniqueViolations > 0)
+        {
+            PendingUniqueViolations--;
+
+            throw new UniqueConstraintViolationException("Simulated unique constraint violation.");
         }
 
         CommitCount++;

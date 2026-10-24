@@ -2,15 +2,17 @@
 
 JWT refresh token rotation with reuse detection — .NET 10, ASP.NET Core, PostgreSQL, Docker, TDD.
 
-> **Status: work in progress.** The domain model and the persistence layer (EF Core + PostgreSQL) are complete and tested, including concurrent refreshes. Family revocation and the HTTP endpoints are the next steps (see [Roadmap](#roadmap)).
+> **Status: work in progress.** The domain model, the persistence layer (EF Core + PostgreSQL) and the application service (issue, refresh, logout and family revocation) are complete and tested, including concurrent requests. The HTTP endpoints are the next step (see [Roadmap](#roadmap)).
 
 ## How it works
 
 - **Access tokens** are short-lived JWTs and are never stored.
 - **Refresh tokens** are random 256-bit values. The client gets the raw value; the database keeps only its SHA-256 hash.
 - **Every refresh rotates the token:** the current one is marked as used and a new one is issued in the same *family* (the chain of tokens that started at one login).
-- **Reuse detection:** a token that was already used and shows up again means someone else has a copy. The rotation is refused with `ReuseDetected`, so the whole family can be revoked.
+- **Reuse detection:** a token that was already used and shows up again means someone else has a copy. The rotation is refused with `ReuseDetected` and the whole family is revoked, which ends the session for both the attacker and the victim.
 - **Two deadlines:** each token expires after a period of inactivity, and the whole session has an absolute limit since login that rotations cannot extend.
+- **Logout revokes the family**, so a successor created by a refresh that finished at the same time is revoked too. An unknown token is ignored, so the response never reveals whether a token exists.
+- **Concurrent requests:** if two requests change the same token at once, only one commit wins. A losing refresh returns `Conflict` and issues nothing; a losing family revocation reloads the tokens and tries again (up to three attempts), because the family must end up revoked.
 
 | Presented token | Result |
 | - | - |
@@ -35,11 +37,12 @@ The reasoning behind the main choices is recorded as Architecture Decision Recor
 ```text
 src/
   JwtRefresh.Domain/                  RefreshToken, PasswordHasher (no framework dependencies)
-  JwtRefresh.Application/             repository and unit of work interfaces
+  JwtRefresh.Application/             RefreshTokenService, repository and unit of work interfaces
   JwtRefresh.Infrastructure/          EF Core mapping, migrations and repositories (PostgreSQL)
   JwtRefresh.Api/                     ASP.NET Core API (in progress)
 tests/
-  JwtRefresh.Domain.Tests/            unit tests (xUnit)
+  JwtRefresh.Domain.Tests/            domain unit tests (xUnit)
+  JwtRefresh.Application.Tests/       service tests with in-memory fakes and FakeTimeProvider
   JwtRefresh.Infrastructure.Tests/    repository tests against PostgreSQL (Testcontainers)
   JwtRefresh.Api.IntegrationTests/    integration tests (in progress)
 docs/adr/                             Architecture Decision Records
@@ -53,7 +56,7 @@ Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download) and Docker (or
 dotnet test
 ```
 
-The domain was built test-first: every behavior went through a failing test before the implementation, and the commit history keeps each RED → GREEN → REFACTOR step.
+The domain and the application service were built test-first: every behavior went through a failing test before the implementation, and the commit history keeps each RED → GREEN → REFACTOR step.
 
 ## Running locally
 
@@ -75,7 +78,8 @@ The connection string for development is in `src/JwtRefresh.Api/appsettings.Deve
 - [x] Absolute session lifetime
 - [x] Persistence with EF Core and PostgreSQL
 - [x] Concurrent refresh handling (two requests with the same token)
-- [ ] Family revocation on reuse detection
+- [x] Family revocation on reuse detection, with retry on concurrent conflicts
+- [x] Logout (family revocation)
 - [ ] Endpoints: register, login, refresh, logout
 - [ ] Integration tests with `WebApplicationFactory` and Testcontainers
 - [ ] ProblemDetails, structured logging and rate limiting

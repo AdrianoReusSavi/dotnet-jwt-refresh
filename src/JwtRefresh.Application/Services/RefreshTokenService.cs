@@ -63,6 +63,16 @@ public class RefreshTokenService(
         return new RefreshResult(RefreshStatus.Refreshed, result.NextRawValue, token.UserId);
     }
 
+    public async Task RevokeAsync(string rawValue, CancellationToken cancellationToken = default)
+    {
+        var token = await repository.GetByHashAsync(RefreshToken.Hash(rawValue), cancellationToken);
+
+        if (token is null)
+            return;
+
+        await RevokeFamilyAsync(token.FamilyId, timeProvider.GetUtcNow(), cancellationToken);
+    }
+
     private static RefreshStatus ToRefreshStatus(RotationStatus status) => status switch
     {
         RotationStatus.Expired => RefreshStatus.Expired,
@@ -90,7 +100,4 @@ public class RefreshTokenService(
             }
         }
     }
-
-    public Task RevokeAsync(string rawValue, CancellationToken cancellationToken = default)
-        => throw new NotImplementedException();
 }

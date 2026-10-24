@@ -317,4 +317,55 @@ public class RefreshTokenServiceTests
             async () => await _service.RefreshAsync(rawValue)
         );
     }
+
+    [Fact]
+    public async Task RevokeAsync_Revokes_The_Whole_Family()
+    {
+        var (token, _, secondRawValue) = await IssueAndRotateAsync();
+
+        await _service.RevokeAsync(secondRawValue);
+
+        var storedTokens = await _repository.GetByFamilyIdAsync(token.FamilyId);
+
+        Assert.Collection(storedTokens.OrderBy(t => t.CreatedAt),
+            item => Assert.Equal(_timeProvider.GetUtcNow(), item.RevokedAt),
+            item => Assert.Equal(_timeProvider.GetUtcNow(), item.RevokedAt)
+        );
+    }
+
+    [Fact]
+    public async Task RevokeAsync_Does_Not_Revoke_Other_Families()
+    {
+        var (_, _, secondRawValue) = await IssueAndRotateAsync();
+        var (otherToken, _, _) = await IssueAndRotateAsync();
+
+        await _service.RevokeAsync(secondRawValue);
+
+        var storedOtherTokens = await _repository.GetByFamilyIdAsync(otherToken.FamilyId);
+
+        Assert.Collection(storedOtherTokens.OrderBy(t => t.CreatedAt),
+            item => Assert.Null(item.RevokedAt),
+            item => Assert.Null(item.RevokedAt)
+        );
+    }
+
+    [Fact]
+    public async Task RevokeAsync_Ignores_An_Unknown_Token()
+    {
+        var (_, rawValue) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime, SessionLifetime);
+
+        await _service.RevokeAsync(rawValue);
+
+        Assert.Equal(0, _unitOfWork.CommitCount);
+    }
+
+    [Fact]
+    public async Task RevokeAsync_Commits_The_Revocation()
+    {
+        var (_, _, secondRawValue) = await IssueAndRotateAsync();
+
+        await _service.RevokeAsync(secondRawValue);
+
+        Assert.Equal(2, _unitOfWork.CommitCount);
+    }
 }

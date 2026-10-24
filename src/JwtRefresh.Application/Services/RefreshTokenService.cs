@@ -90,4 +90,7 @@ public class RefreshTokenService(
             }
         }
     }
+
+    public Task RevokeAsync(string rawValue, CancellationToken cancellationToken = default)
+        => throw new NotImplementedException();
 }

@@ -1,3 +1,4 @@
+using JwtRefresh.Application.Auth;
 using JwtRefresh.Application.Enums;
 using JwtRefresh.Application.Services;
 using JwtRefresh.Application.Tests.Fakes;
@@ -55,5 +56,72 @@ public class UserServiceTests
 
         Assert.Single(_repository.Users);
         Assert.Equal(1, _unitOfWork.CommitCount);
+    }
+
+    [Fact]
+    public async Task LoginAsync_Succeeds_With_The_Correct_Password()
+    {
+        var email = GenerateEmail();
+
+        await _service.RegisterAsync(email, Password);
+
+        var loginResult = await _service.LoginAsync(email, Password);
+
+        var user = Assert.Single(_repository.Users);
+
+        Assert.Equal(LoginStatus.Succeeded, loginResult.Status);
+        Assert.Equal(user.Id, loginResult.UserId);
+    }
+
+    [Fact]
+    public async Task LoginAsync_Ignores_Email_Case_And_Spaces()
+    {
+        var email = GenerateEmail();
+        var emailVariant = $"  {email.ToUpperInvariant()}  ";
+
+        await _service.RegisterAsync(email, Password);
+
+        var loginResult = await _service.LoginAsync(emailVariant, Password);
+
+        var user = Assert.Single(_repository.Users);
+
+        Assert.Equal(LoginStatus.Succeeded, loginResult.Status);
+        Assert.Equal(user.Id, loginResult.UserId);
+    }
+
+    [Fact]
+    public async Task LoginAsync_Rejects_A_Wrong_Password()
+    {
+        var email = GenerateEmail();
+
+        await _service.RegisterAsync(email, Password);
+
+        var result = await _service.LoginAsync(email, "wrongPassword");
+
+        Assert.Equal(new LoginResult(LoginStatus.InvalidCredentials, null), result);
+    }
+
+    [Fact]
+    public async Task LoginAsync_Rejects_An_Unknown_Email()
+    {
+        await _service.RegisterAsync(GenerateEmail(), Password);
+
+        var result = await _service.LoginAsync("wrongEmail@example.com", Password);
+
+        Assert.Equal(new LoginResult(LoginStatus.InvalidCredentials, null), result);
+    }
+
+    [Fact]
+    public async Task LoginAsync_Does_Not_Commit()
+    {
+        var email = GenerateEmail();
+
+        await _service.RegisterAsync(email, Password);
+
+        var commitsBefore = _unitOfWork.CommitCount;
+
+        await _service.LoginAsync(email, Password);
+
+        Assert.Equal(commitsBefore, _unitOfWork.CommitCount);
     }
 }

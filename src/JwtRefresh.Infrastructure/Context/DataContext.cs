@@ -12,4 +12,5 @@ public class DataContext(DbContextOptions<DataContext> options) : DbContext(opti
     }
 
     public DbSet<RefreshToken> RefreshTokens { get; set; }
+    public DbSet<User> Users { get; set; }
 }

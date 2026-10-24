@@ -78,6 +78,9 @@ namespace JwtRefresh.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_refresh_tokens_token_hash");
 
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_refresh_tokens_user_id");
+
                     b.ToTable("refresh_tokens", (string)null);
                 });
 
@@ -111,6 +114,16 @@ namespace JwtRefresh.Infrastructure.Migrations
                         .HasDatabaseName("ux_users_email");
 
                     b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("JwtRefresh.Domain.Auth.RefreshToken", b =>
+                {
+                    b.HasOne("JwtRefresh.Domain.Auth.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_refresh_tokens_users_user_id");
                 });
 #pragma warning restore 612, 618
         }

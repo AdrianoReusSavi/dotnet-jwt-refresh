@@ -14,8 +14,12 @@ public class RefreshTokenRepositoryTests(PostgreSqlFixture fixture) : IClassFixt
     private static readonly TimeSpan Lifetime = TimeSpan.FromDays(7);
     private static readonly TimeSpan SessionLifetime = TimeSpan.FromDays(30);
 
-    private static (RefreshToken Token, string RawValue) IssueToken(Guid? userId = null)
-        => RefreshToken.Issue(userId ?? Guid.NewGuid(), Now, Lifetime, SessionLifetime);
+    private async Task<(RefreshToken Token, string RawValue)> IssueTokenAsync()
+    {
+        var userId = await fixture.CreateUserAsync();
+
+        return RefreshToken.Issue(userId, Now, Lifetime, SessionLifetime);
+    }
 
     [Fact]
     public async Task Add_And_Commit_Persists_All_Properties()
@@ -28,7 +32,7 @@ public class RefreshTokenRepositoryTests(PostgreSqlFixture fixture) : IClassFixt
 
         var newRepository = new RefreshTokenRepository(newContext);
 
-        var (token, _) = IssueToken();
+        var (token, _) = await IssueTokenAsync();
 
         repository.Add(token);
         await unitOfWork.CommitAsync();
@@ -58,7 +62,7 @@ public class RefreshTokenRepositoryTests(PostgreSqlFixture fixture) : IClassFixt
 
         var newRepository = new RefreshTokenRepository(newContext);
 
-        var (token, _) = IssueToken();
+        var (token, _) = await IssueTokenAsync();
 
         repository.Add(token);
 
@@ -95,7 +99,7 @@ public class RefreshTokenRepositoryTests(PostgreSqlFixture fixture) : IClassFixt
 
         var newRepository = new RefreshTokenRepository(newContext);
 
-        var (token, _) = IssueToken();
+        var (token, _) = await IssueTokenAsync();
 
         repository.Add(token);
         await unitOfWork.CommitAsync();
@@ -119,12 +123,12 @@ public class RefreshTokenRepositoryTests(PostgreSqlFixture fixture) : IClassFixt
         var repository = new RefreshTokenRepository(context);
         var unitOfWork = new UnitOfWork(context);
 
-        var (token, _) = IssueToken();
+        var (token, _) = await IssueTokenAsync();
 
         repository.Add(token);
         await unitOfWork.CommitAsync();
 
-        var (newToken, _) = IssueToken();
+        var (newToken, _) = await IssueTokenAsync();
 
         repository.Add(newToken);
 
@@ -142,6 +146,28 @@ public class RefreshTokenRepositoryTests(PostgreSqlFixture fixture) : IClassFixt
     }
 
     [Fact]
+    public async Task Token_For_An_Unknown_User_Is_Rejected_On_Commit()
+    {
+        await using var context = fixture.CreateContext();
+
+        var repository = new RefreshTokenRepository(context);
+        var unitOfWork = new UnitOfWork(context);
+
+        var (token, _) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime, SessionLifetime);
+
+        repository.Add(token);
+
+        var exception = await Assert.ThrowsAsync<DbUpdateException>(
+            async () => await unitOfWork.CommitAsync()
+        );
+
+        var postgresException = Assert.IsType<PostgresException>(exception.InnerException);
+
+        Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, postgresException.SqlState);
+        Assert.Equal("fk_refresh_tokens_users_user_id", postgresException.ConstraintName);
+    }
+
+    [Fact]
     public async Task GetByFamilyIdAsync_Returns_Only_Tokens_From_The_Family()
     {
         await using var context = fixture.CreateContext();
@@ -152,8 +178,8 @@ public class RefreshTokenRepositoryTests(PostgreSqlFixture fixture) : IClassFixt
 
         var newRepository = new RefreshTokenRepository(newContext);
 
-        var (token, _) = IssueToken();
-        var (anotherToken, _) = IssueToken();
+        var (token, _) = await IssueTokenAsync();
+        var (anotherToken, _) = await IssueTokenAsync();
 
         repository.Add(token);
         repository.Add(anotherToken);
@@ -207,7 +233,7 @@ public class RefreshTokenRepositoryTests(PostgreSqlFixture fixture) : IClassFixt
 
         var readRepository = new RefreshTokenRepository(readContext);
 
-        var (token, _) = IssueToken();
+        var (token, _) = await IssueTokenAsync();
 
         setupRepository.Add(token);
 
@@ -266,7 +292,7 @@ public class RefreshTokenRepositoryTests(PostgreSqlFixture fixture) : IClassFixt
 
         var readRepository = new RefreshTokenRepository(readContext);
 
-        var (token, _) = IssueToken();
+        var (token, _) = await IssueTokenAsync();
 
         setupRepository.Add(token);
 

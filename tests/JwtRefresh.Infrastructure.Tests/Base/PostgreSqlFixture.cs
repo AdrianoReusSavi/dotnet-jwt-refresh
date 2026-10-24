@@ -1,3 +1,4 @@
+using JwtRefresh.Domain.Auth;
 using JwtRefresh.Infrastructure.Context;
 using Microsoft.EntityFrameworkCore;
 using Testcontainers.PostgreSql;
@@ -28,4 +29,19 @@ public sealed class PostgreSqlFixture : IAsyncLifetime
 
     public async Task DisposeAsync()
         => await _container.DisposeAsync();
+
+    public async Task<Guid> CreateUserAsync()
+    {
+        await using var context = CreateContext();
+
+        var email = $"{Guid.NewGuid():N}@example.com";
+
+        var user = User.Register(email, "password", new DateTimeOffset(2026, 1, 1, 12, 0, 0, TimeSpan.Zero));
+
+        context.Users.Add(user);
+
+        await context.SaveChangesAsync();
+
+        return user.Id;
+    }
 }

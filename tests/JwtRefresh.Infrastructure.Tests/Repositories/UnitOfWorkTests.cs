@@ -45,7 +45,7 @@ public class UnitOfWorkTests(PostgreSqlFixture fixture) : IClassFixture<PostgreS
 
         var readRepository = new RefreshTokenRepository(readContext);
 
-        var rawValue = await issueService.IssueAsync(Guid.NewGuid());
+        var rawValue = await issueService.IssueAsync(await fixture.CreateUserAsync());
 
         _timeProvider.Advance(TimeSpan.FromDays(1));
 

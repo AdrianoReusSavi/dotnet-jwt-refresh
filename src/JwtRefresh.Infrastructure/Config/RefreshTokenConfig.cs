@@ -17,8 +17,17 @@ public class RefreshTokenConfig : IEntityTypeConfiguration<RefreshToken>
             .ValueGeneratedNever()
             .HasColumnName("id");
 
+        builder.HasIndex(i => i.UserId)
+            .HasDatabaseName("ix_refresh_tokens_user_id");
+
         builder.Property(p => p.UserId)
             .HasColumnName("user_id");
+
+        builder.HasOne<User>()
+            .WithMany()
+            .HasForeignKey(f => f.UserId)
+            .HasConstraintName("fk_refresh_tokens_users_user_id")
+            .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasIndex(i => i.FamilyId)
             .HasDatabaseName("ix_refresh_tokens_family_id");

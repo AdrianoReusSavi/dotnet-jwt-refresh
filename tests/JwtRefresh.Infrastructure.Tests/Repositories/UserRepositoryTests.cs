@@ -1,3 +1,4 @@
+using JwtRefresh.Application.Exceptions;
 using JwtRefresh.Domain.Auth;
 using JwtRefresh.Infrastructure.Repositories;
 using JwtRefresh.Infrastructure.Tests.Base;
@@ -111,11 +112,12 @@ public class UserRepositoryTests(PostgreSqlFixture fixture) : IClassFixture<Post
 
         duplicatedRepository.Add(duplicatedUser);
 
-        var exception = await Assert.ThrowsAsync<DbUpdateException>(
+        var exception = await Assert.ThrowsAsync<UniqueConstraintViolationException>(
             async () => await duplicatedUnitOfWork.CommitAsync()
         );
 
-        var postgresException = Assert.IsType<PostgresException>(exception.InnerException);
+        var dbUpdateException = Assert.IsType<DbUpdateException>(exception.InnerException);
+        var postgresException = Assert.IsType<PostgresException>(dbUpdateException.InnerException);
 
         Assert.Equal(PostgresErrorCodes.UniqueViolation, postgresException.SqlState);
         Assert.Equal("ux_users_email", postgresException.ConstraintName);

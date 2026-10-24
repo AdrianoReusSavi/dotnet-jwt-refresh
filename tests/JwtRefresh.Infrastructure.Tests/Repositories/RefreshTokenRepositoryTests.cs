@@ -135,11 +135,12 @@ public class RefreshTokenRepositoryTests(PostgreSqlFixture fixture) : IClassFixt
         context.Entry(newToken)
             .Property(p => p.TokenHash).CurrentValue = token.TokenHash;
 
-        var exception = await Assert.ThrowsAsync<DbUpdateException>(
+        var exception = await Assert.ThrowsAsync<UniqueConstraintViolationException>(
             async () => await unitOfWork.CommitAsync()
         );
 
-        var postgresException = Assert.IsType<PostgresException>(exception.InnerException);
+        var dbUpdateException = Assert.IsType<DbUpdateException>(exception.InnerException);
+        var postgresException = Assert.IsType<PostgresException>(dbUpdateException.InnerException);
 
         Assert.Equal(PostgresErrorCodes.UniqueViolation, postgresException.SqlState);
         Assert.Equal("ux_refresh_tokens_token_hash", postgresException.ConstraintName);

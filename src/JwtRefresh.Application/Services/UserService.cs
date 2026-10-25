@@ -1,5 +1,6 @@
 using JwtRefresh.Application.Auth;
 using JwtRefresh.Application.Enums;
+using JwtRefresh.Application.Exceptions;
 using JwtRefresh.Application.Interfaces.Repository;
 using JwtRefresh.Application.Interfaces.Service;
 using JwtRefresh.Domain.Auth;
@@ -27,7 +28,14 @@ public class UserService(
 
         repository.Add(user);
 
-        await uow.CommitAsync(cancellationToken);
+        try
+        {
+            await uow.CommitAsync(cancellationToken);
+        }
+        catch (UniqueConstraintViolationException)
+        {
+            return new RegisterResult(RegisterStatus.EmailTaken, null);
+        }
 
         return new RegisterResult(RegisterStatus.Registered, user.Id);
     }

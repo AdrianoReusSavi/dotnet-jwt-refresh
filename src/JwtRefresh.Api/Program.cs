@@ -1,4 +1,5 @@
 using System.Text;
+using JwtRefresh.Api.Endpoints;
 using JwtRefresh.Application.Auth;
 using JwtRefresh.Application.Interfaces.Repository;
 using JwtRefresh.Application.Interfaces.Security;
@@ -62,6 +63,8 @@ builder.Services.AddOptions<JwtBearerOptions>(JwtBearerDefaults.AuthenticationSc
 
 builder.Services.AddAuthorization();
 
+builder.Services.AddValidation();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -72,5 +75,6 @@ if (app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+app.MapAuthEndpoints();
 
 app.Run();

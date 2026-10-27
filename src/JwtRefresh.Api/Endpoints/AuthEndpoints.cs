@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using JwtRefresh.Api.Endpoints.Contracts;
 using JwtRefresh.Application.Enums;
+using JwtRefresh.Application.Interfaces.Security;
 using JwtRefresh.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Http.HttpResults;
 
@@ -13,6 +14,8 @@ public static class AuthEndpoints
         var group = app.MapGroup("/auth");
 
         group.MapPost("/register", RegisterAsync);
+
+        group.MapPost("/login", LoginAsync);
 
         return app;
     }
@@ -28,5 +31,24 @@ public static class AuthEndpoints
             RegisterStatus.EmailTaken => TypedResults.Conflict(),
             _ => throw new UnreachableException(),
         };
+    }
+
+    private static async Task<Results<Ok<LoginResponse>, UnauthorizedHttpResult>> LoginAsync(
+        LoginRequest request,
+        IUserService userService,
+        IRefreshTokenService refreshTokenService,
+        IAccessTokenIssuer accessTokenIssuer,
+        CancellationToken cancellationToken)
+    {
+        var result = await userService.LoginAsync(request.Email, request.Password, cancellationToken);
+
+        if (result.Status is not LoginStatus.Succeeded)
+            return TypedResults.Unauthorized();
+
+        var userId = result.UserId!.Value;
+        var refreshToken = await refreshTokenService.IssueAsync(userId, cancellationToken);
+        var accessToken = accessTokenIssuer.Issue(userId);
+
+        return TypedResults.Ok(new LoginResponse(accessToken.Value, refreshToken, accessToken.ExpiresAt));
     }
 }

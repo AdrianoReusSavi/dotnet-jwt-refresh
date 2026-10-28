@@ -1,9 +1,11 @@
 using System.Diagnostics;
+using System.Security.Claims;
 using JwtRefresh.Api.Endpoints.Contracts;
 using JwtRefresh.Application.Enums;
 using JwtRefresh.Application.Interfaces.Security;
 using JwtRefresh.Application.Interfaces.Service;
 using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.IdentityModel.JsonWebTokens;
 
 namespace JwtRefresh.Api.Endpoints;
 
@@ -16,6 +18,8 @@ public static class AuthEndpoints
         group.MapPost("/register", RegisterAsync);
 
         group.MapPost("/login", LoginAsync);
+
+        group.MapGet("/me", Me).RequireAuthorization();
 
         return app;
     }
@@ -50,5 +54,12 @@ public static class AuthEndpoints
         var accessToken = accessTokenIssuer.Issue(userId);
 
         return TypedResults.Ok(new LoginResponse(accessToken.Value, refreshToken, accessToken.ExpiresAt));
+    }
+
+    private static Ok<MeResponse> Me(ClaimsPrincipal user)
+    {
+        var userId = Guid.Parse(user.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+
+        return TypedResults.Ok(new MeResponse(userId));
     }
 }

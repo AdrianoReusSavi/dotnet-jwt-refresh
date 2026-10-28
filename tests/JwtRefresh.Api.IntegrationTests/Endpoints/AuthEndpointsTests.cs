@@ -1,6 +1,13 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text;
 using JwtRefresh.Api.IntegrationTests.Base;
+using JwtRefresh.Application.Auth;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using Microsoft.IdentityModel.JsonWebTokens;
+using Microsoft.IdentityModel.Tokens;
 
 namespace JwtRefresh.Api.IntegrationTests.Endpoints;
 
@@ -8,9 +15,34 @@ public class AuthEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactory>
 {
     private sealed record RegisterResponse(Guid UserId);
     private sealed record LoginResponse(string AccessToken, string RefreshToken, DateTimeOffset ExpiresAt);
+    private sealed record MeResponse(Guid UserId);
 
     private static string CreateEmail()
         => $"{Guid.NewGuid():N}@example.com";
+
+    private string CreateToken(Guid userId, string signingKey, DateTimeOffset expiresAt)
+    {
+        var options = factory.Services.GetRequiredService<IOptions<AccessTokenOptions>>().Value;
+
+        var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(signingKey));
+        var issuedAt = expiresAt - options.Lifetime;
+
+        var descriptor = new SecurityTokenDescriptor
+        {
+            Issuer = options.Issuer,
+            Audience = options.Audience,
+            IssuedAt = issuedAt.UtcDateTime,
+            NotBefore = issuedAt.UtcDateTime,
+            Expires = expiresAt.UtcDateTime,
+            Claims = new Dictionary<string, object>
+            {
+                [JwtRegisteredClaimNames.Sub] = userId.ToString(),
+            },
+            SigningCredentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256),
+        };
+
+        return new JsonWebTokenHandler().CreateToken(descriptor);
+    }
 
     [Fact]
     public async Task Register_Returns_Created_With_The_User_Id()
@@ -153,5 +185,106 @@ public class AuthEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var response = await client.PostAsJsonAsync("/auth/login", new { email, password });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Me_Returns_The_User_Id_For_A_Valid_Access_Token()
+    {
+        var client = factory.CreateClient();
+
+        var email = CreateEmail();
+        var password = "validPassword";
+
+        var register = await client.PostAsJsonAsync("/auth/register", new { email, password });
+
+        Assert.Equal(HttpStatusCode.Created, register.StatusCode);
+
+        var bodyRegister = await register.Content.ReadFromJsonAsync<RegisterResponse>();
+
+        var login = await client.PostAsJsonAsync("/auth/login", new { email, password });
+
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+
+        var bodyLogin = await login.Content.ReadFromJsonAsync<LoginResponse>();
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", bodyLogin!.AccessToken);
+
+        var result = await client.GetAsync("/auth/me");
+
+        Assert.Equal(HttpStatusCode.OK, result.StatusCode);
+
+        var body = await result.Content.ReadFromJsonAsync<MeResponse>();
+
+        Assert.NotNull(body);
+        Assert.Equal(bodyRegister!.UserId, body.UserId);
+    }
+
+    [Fact]
+    public async Task Me_Returns_Unauthorized_Without_A_Token()
+    {
+        var client = factory.CreateClient();
+
+        var result = await client.GetAsync("/auth/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task Me_Returns_Unauthorized_For_A_Malformed_Token()
+    {
+        var client = factory.CreateClient();
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", "not-a-jwt");
+
+        var result = await client.GetAsync("/auth/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task Me_Returns_Unauthorized_For_A_Token_Signed_With_Another_Key()
+    {
+        var client = factory.CreateClient();
+
+        var email = CreateEmail();
+        var password = "validPassword";
+
+        var register = await client.PostAsJsonAsync("/auth/register", new { email, password });
+
+        Assert.Equal(HttpStatusCode.Created, register.StatusCode);
+
+        var bodyRegister = await register.Content.ReadFromJsonAsync<RegisterResponse>();
+
+        var token = CreateToken(bodyRegister!.UserId, "another-signing-key-with-32-char", DateTimeOffset.UtcNow.AddMinutes(15));
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var result = await client.GetAsync("/auth/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task Me_Returns_Unauthorized_For_An_Expired_Token()
+    {
+        var client = factory.CreateClient();
+
+        var email = CreateEmail();
+        var password = "validPassword";
+
+        var register = await client.PostAsJsonAsync("/auth/register", new { email, password });
+
+        Assert.Equal(HttpStatusCode.Created, register.StatusCode);
+
+        var bodyRegister = await register.Content.ReadFromJsonAsync<RegisterResponse>();
+
+        var signingKey = factory.Services.GetRequiredService<IOptions<AccessTokenOptions>>().Value.SigningKey;
+        var token = CreateToken(bodyRegister!.UserId, signingKey, DateTimeOffset.UtcNow.AddMinutes(-5));
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+
+        var result = await client.GetAsync("/auth/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
     }
 }

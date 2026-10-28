@@ -16,6 +16,7 @@ public class AuthEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactory>
     private sealed record RegisterResponse(Guid UserId);
     private sealed record LoginResponse(string AccessToken, string RefreshToken, DateTimeOffset ExpiresAt);
     private sealed record MeResponse(Guid UserId);
+    private sealed record RefreshResponse(string AccessToken, string RefreshToken, DateTimeOffset ExpiresAt);
 
     private static string CreateEmail()
         => $"{Guid.NewGuid():N}@example.com";
@@ -42,6 +43,26 @@ public class AuthEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactory>
         };
 
         return new JsonWebTokenHandler().CreateToken(descriptor);
+    }
+
+    private static async Task<(Guid UserId, LoginResponse Tokens)> RegisterAndLoginAsync(HttpClient client)
+    {
+        var email = CreateEmail();
+        var password = "validPassword";
+
+        var register = await client.PostAsJsonAsync("/auth/register", new { email, password });
+
+        Assert.Equal(HttpStatusCode.Created, register.StatusCode);
+
+        var registerBody = await register.Content.ReadFromJsonAsync<RegisterResponse>();
+
+        var login = await client.PostAsJsonAsync("/auth/login", new { email, password });
+
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+
+        var tokens = await login.Content.ReadFromJsonAsync<LoginResponse>();
+
+        return (registerBody!.UserId, tokens!);
     }
 
     [Fact]
@@ -286,5 +307,109 @@ public class AuthEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var result = await client.GetAsync("/auth/me");
 
         Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task Refresh_Returns_Ok_With_A_New_Token_Pair()
+    {
+        var client = factory.CreateClient();
+
+        var (_, tokens) = await RegisterAndLoginAsync(client);
+
+        var result = await client.PostAsJsonAsync("/auth/refresh", new { refreshToken = tokens.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.OK, result.StatusCode);
+
+        var body = await result.Content.ReadFromJsonAsync<RefreshResponse>();
+
+        Assert.NotNull(body);
+        Assert.NotEmpty(body.AccessToken);
+        Assert.NotEmpty(body.RefreshToken);
+        Assert.NotEqual(tokens.RefreshToken, body.RefreshToken);
+        Assert.True(body.ExpiresAt > DateTimeOffset.UtcNow);
+    }
+
+    [Fact]
+    public async Task Refresh_Returns_An_Access_Token_For_The_Same_User()
+    {
+        var client = factory.CreateClient();
+
+        var (userId, tokens) = await RegisterAndLoginAsync(client);
+
+        var result = await client.PostAsJsonAsync("/auth/refresh", new { refreshToken = tokens.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.OK, result.StatusCode);
+
+        var body = await result.Content.ReadFromJsonAsync<RefreshResponse>();
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", body!.AccessToken);
+
+        var me = await client.GetAsync("/auth/me");
+
+        Assert.Equal(HttpStatusCode.OK, me.StatusCode);
+
+        var bodyMe = await me.Content.ReadFromJsonAsync<MeResponse>();
+
+        Assert.Equal(userId, bodyMe!.UserId);
+    }
+
+    [Fact]
+    public async Task Refresh_Returns_Unauthorized_For_An_Unknown_Token()
+    {
+        var client = factory.CreateClient();
+
+        var wrongToken = "wrong-token";
+
+        var result = await client.PostAsJsonAsync("/auth/refresh", new { refreshToken = wrongToken });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task Refresh_Returns_Unauthorized_When_A_Rotated_Token_Is_Reused()
+    {
+        var client = factory.CreateClient();
+
+        var (_, tokens) = await RegisterAndLoginAsync(client);
+
+        var first = await client.PostAsJsonAsync("/auth/refresh", new { refreshToken = tokens.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        var reuse = await client.PostAsJsonAsync("/auth/refresh", new { refreshToken = tokens.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, reuse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Refresh_Revokes_The_Successor_When_A_Rotated_Token_Is_Reused()
+    {
+        var client = factory.CreateClient();
+
+        var (_, tokens) = await RegisterAndLoginAsync(client);
+
+        var refresh = await client.PostAsJsonAsync("/auth/refresh", new { refreshToken = tokens.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
+
+        var successor = await refresh.Content.ReadFromJsonAsync<RefreshResponse>();
+
+        var reuse = await client.PostAsJsonAsync("/auth/refresh", new { refreshToken = tokens.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, reuse.StatusCode);
+
+        var afterReuse = await client.PostAsJsonAsync("/auth/refresh", new { refreshToken = successor!.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, afterReuse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Refresh_Returns_BadRequest_For_An_Empty_Token()
+    {
+        var client = factory.CreateClient();
+
+        var result = await client.PostAsJsonAsync("/auth/refresh", new { refreshToken = "" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, result.StatusCode);
     }
 }

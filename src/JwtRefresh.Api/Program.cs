@@ -65,6 +65,8 @@ builder.Services.AddAuthorization();
 
 builder.Services.AddValidation();
 
+builder.Services.AddProblemDetails();
+
 var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
@@ -72,6 +74,8 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+app.UseExceptionHandler();
+app.UseStatusCodePages();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();

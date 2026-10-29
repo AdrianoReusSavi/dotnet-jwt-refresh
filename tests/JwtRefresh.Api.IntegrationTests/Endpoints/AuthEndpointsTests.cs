@@ -193,7 +193,17 @@ public class AuthEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.Unauthorized, wrongPasswordResponse.StatusCode);
         Assert.Equal(wrongPasswordResponse.StatusCode, unknownEmailResponse.StatusCode);
-        Assert.Equal(await wrongPasswordResponse.Content.ReadAsStringAsync(), await unknownEmailResponse.Content.ReadAsStringAsync());
+
+        var wrongPasswordProblem = await wrongPasswordResponse.Content.ReadFromJsonAsync<ProblemDetails>();
+        var unknownEmailProblem = await unknownEmailResponse.Content.ReadFromJsonAsync<ProblemDetails>();
+
+        Assert.NotNull(wrongPasswordProblem);
+        Assert.NotNull(unknownEmailProblem);
+
+        Assert.Equal(wrongPasswordProblem.Status, unknownEmailProblem.Status);
+        Assert.Equal(wrongPasswordProblem.Type, unknownEmailProblem.Type);
+        Assert.Equal(wrongPasswordProblem.Title, unknownEmailProblem.Title);
+        Assert.Equal(wrongPasswordProblem.Detail, unknownEmailProblem.Detail);
     }
 
     [Theory]

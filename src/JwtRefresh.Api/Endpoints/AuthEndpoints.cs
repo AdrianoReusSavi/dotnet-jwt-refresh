@@ -23,6 +23,8 @@ public static class AuthEndpoints
 
         group.MapPost("/refresh", RefreshAsync);
 
+        group.MapPost("/logout", LogoutAsync);
+
         return app;
     }
 
@@ -89,5 +91,15 @@ public static class AuthEndpoints
             RefreshStatus.Conflict => TypedResults.Conflict(),
             _ => throw new UnreachableException(),
         };
+    }
+
+    private static async Task<NoContent> LogoutAsync(
+        LogoutRequest request,
+        IRefreshTokenService refreshTokenService,
+        CancellationToken cancellationToken)
+    {
+        await refreshTokenService.RevokeAsync(request.RefreshToken, cancellationToken);
+
+        return TypedResults.NoContent();
     }
 }

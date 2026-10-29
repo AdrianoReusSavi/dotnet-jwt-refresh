@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Text;
 using JwtRefresh.Api.IntegrationTests.Base;
 using JwtRefresh.Application.Auth;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.JsonWebTokens;
@@ -534,5 +535,91 @@ public class AuthEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactory>
         var result = await client.PostAsJsonAsync("/auth/logout", new { refreshToken = "" });
 
         Assert.Equal(HttpStatusCode.BadRequest, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_Returns_ProblemDetails_For_Invalid_Credentials()
+    {
+        var client = factory.CreateClient();
+
+        var email = CreateEmail();
+        var password = "validPassword";
+        var wrongPassword = "wrongPassword";
+
+        var register = await client.PostAsJsonAsync("/auth/register", new { email, password });
+
+        Assert.Equal(HttpStatusCode.Created, register.StatusCode);
+
+        var response = await client.PostAsJsonAsync("/auth/login", new { email, password = wrongPassword });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+
+        var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
+
+        Assert.NotNull(problem);
+        Assert.Equal(401, problem.Status);
+        Assert.Equal("Unauthorized", problem.Title);
+    }
+
+    [Fact]
+    public async Task Register_Returns_ProblemDetails_When_The_Email_Is_Taken()
+    {
+        var client = factory.CreateClient();
+
+        var email = CreateEmail();
+        var password = "validPassword";
+        var otherPassword = "otherValidPassword";
+
+        var first = await client.PostAsJsonAsync("/auth/register", new { email, password });
+
+        Assert.Equal(HttpStatusCode.Created, first.StatusCode);
+
+        var second = await client.PostAsJsonAsync("/auth/register", new { email = email.ToUpperInvariant(), password = otherPassword });
+
+        Assert.Equal(HttpStatusCode.Conflict, second.StatusCode);
+        Assert.Equal("application/problem+json", second.Content.Headers.ContentType?.MediaType);
+
+        var problem = await second.Content.ReadFromJsonAsync<ProblemDetails>();
+
+        Assert.NotNull(problem);
+        Assert.Equal(409, problem.Status);
+        Assert.Equal("Conflict", problem.Title);
+    }
+
+    [Fact]
+    public async Task Refresh_Returns_ProblemDetails_For_A_Refused_Token()
+    {
+        var client = factory.CreateClient();
+
+        var wrongToken = "wrong-token";
+
+        var result = await client.PostAsJsonAsync("/auth/refresh", new { refreshToken = wrongToken });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
+        Assert.Equal("application/problem+json", result.Content.Headers.ContentType?.MediaType);
+
+        var problem = await result.Content.ReadFromJsonAsync<ProblemDetails>();
+
+        Assert.NotNull(problem);
+        Assert.Equal(401, problem.Status);
+        Assert.Equal("Unauthorized", problem.Title);
+    }
+
+    [Fact]
+    public async Task Me_Returns_ProblemDetails_Without_A_Token()
+    {
+        var client = factory.CreateClient();
+
+        var result = await client.GetAsync("/auth/me");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, result.StatusCode);
+        Assert.Equal("application/problem+json", result.Content.Headers.ContentType?.MediaType);
+
+        var problem = await result.Content.ReadFromJsonAsync<ProblemDetails>();
+
+        Assert.NotNull(problem);
+        Assert.Equal(401, problem.Status);
+        Assert.Equal("Unauthorized", problem.Title);
     }
 }

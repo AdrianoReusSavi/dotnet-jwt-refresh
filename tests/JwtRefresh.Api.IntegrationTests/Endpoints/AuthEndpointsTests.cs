@@ -412,4 +412,127 @@ public class AuthEndpointsTests(ApiFactory factory) : IClassFixture<ApiFactory>
 
         Assert.Equal(HttpStatusCode.BadRequest, result.StatusCode);
     }
+
+    [Fact]
+    public async Task Logout_Returns_NoContent()
+    {
+        var client = factory.CreateClient();
+
+        var (_, tokens) = await RegisterAndLoginAsync(client);
+
+        var logout = await client.PostAsJsonAsync("/auth/logout", new { refreshToken = tokens.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
+    }
+
+    [Fact]
+    public async Task Logout_Revokes_The_Refresh_Token()
+    {
+        var client = factory.CreateClient();
+
+        var (_, tokens) = await RegisterAndLoginAsync(client);
+
+        var logout = await client.PostAsJsonAsync("/auth/logout", new { refreshToken = tokens.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
+
+        var refresh = await client.PostAsJsonAsync("/auth/refresh", new { refreshToken = tokens.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, refresh.StatusCode);
+    }
+
+    [Fact]
+    public async Task Logout_With_A_Rotated_Token_Revokes_The_Current_One()
+    {
+        var client = factory.CreateClient();
+
+        var (_, tokens) = await RegisterAndLoginAsync(client);
+
+        var refresh = await client.PostAsJsonAsync("/auth/refresh", new { refreshToken = tokens.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
+
+        var bodyRefresh = await refresh.Content.ReadFromJsonAsync<RefreshResponse>();
+
+        var logout = await client.PostAsJsonAsync("/auth/logout", new { refreshToken = tokens.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
+
+        var afterRefresh = await client.PostAsJsonAsync("/auth/refresh", new { refreshToken = bodyRefresh!.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, afterRefresh.StatusCode);
+    }
+
+    [Fact]
+    public async Task Logout_Does_Not_Revoke_Other_Sessions()
+    {
+        var client = factory.CreateClient();
+
+        var email = CreateEmail();
+        var password = "validPassword";
+
+        var register = await client.PostAsJsonAsync("/auth/register", new { email, password });
+
+        Assert.Equal(HttpStatusCode.Created, register.StatusCode);
+
+        var firstLogin = await client.PostAsJsonAsync("/auth/login", new { email, password });
+
+        Assert.Equal(HttpStatusCode.OK, firstLogin.StatusCode);
+
+        var bodyFirstLogin = await firstLogin.Content.ReadFromJsonAsync<LoginResponse>();
+
+        var secondLogin = await client.PostAsJsonAsync("/auth/login", new { email, password });
+
+        Assert.Equal(HttpStatusCode.OK, secondLogin.StatusCode);
+
+        var bodySecondLogin = await secondLogin.Content.ReadFromJsonAsync<LoginResponse>();
+
+        var logout = await client.PostAsJsonAsync("/auth/logout", new { refreshToken = bodyFirstLogin!.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
+
+        var refresh = await client.PostAsJsonAsync("/auth/refresh", new { refreshToken = bodySecondLogin!.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
+    }
+
+    [Fact]
+    public async Task Logout_Returns_NoContent_For_An_Unknown_Token()
+    {
+        var client = factory.CreateClient();
+
+        var wrongToken = "wrong-token";
+
+        var result = await client.PostAsJsonAsync("/auth/logout", new { refreshToken = wrongToken });
+
+        Assert.Equal(HttpStatusCode.NoContent, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task Logout_Does_Not_Invalidate_The_Access_Token()
+    {
+        var client = factory.CreateClient();
+
+        var (_, tokens) = await RegisterAndLoginAsync(client);
+
+        var logout = await client.PostAsJsonAsync("/auth/logout", new { refreshToken = tokens.RefreshToken });
+
+        Assert.Equal(HttpStatusCode.NoContent, logout.StatusCode);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", tokens.AccessToken);
+
+        var result = await client.GetAsync("/auth/me");
+
+        Assert.Equal(HttpStatusCode.OK, result.StatusCode);
+    }
+
+    [Fact]
+    public async Task Logout_Returns_BadRequest_For_An_Empty_Token()
+    {
+        var client = factory.CreateClient();
+
+        var result = await client.PostAsJsonAsync("/auth/logout", new { refreshToken = "" });
+
+        Assert.Equal(HttpStatusCode.BadRequest, result.StatusCode);
+    }
 }

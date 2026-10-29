@@ -21,6 +21,8 @@ public static class AuthEndpoints
 
         group.MapGet("/me", Me).RequireAuthorization();
 
+        group.MapPost("/refresh", RefreshAsync);
+
         return app;
     }
 
@@ -37,7 +39,7 @@ public static class AuthEndpoints
         };
     }
 
-    private static async Task<Results<Ok<LoginResponse>, UnauthorizedHttpResult>> LoginAsync(
+    private static async Task<Results<Ok<TokenResponse>, UnauthorizedHttpResult>> LoginAsync(
         LoginRequest request,
         IUserService userService,
         IRefreshTokenService refreshTokenService,
@@ -53,7 +55,7 @@ public static class AuthEndpoints
         var refreshToken = await refreshTokenService.IssueAsync(userId, cancellationToken);
         var accessToken = accessTokenIssuer.Issue(userId);
 
-        return TypedResults.Ok(new LoginResponse(accessToken.Value, refreshToken, accessToken.ExpiresAt));
+        return TypedResults.Ok(new TokenResponse(accessToken.Value, refreshToken, accessToken.ExpiresAt));
     }
 
     private static Ok<MeResponse> Me(ClaimsPrincipal user)
@@ -61,5 +63,31 @@ public static class AuthEndpoints
         var userId = Guid.Parse(user.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
 
         return TypedResults.Ok(new MeResponse(userId));
+    }
+
+    private static async Task<Results<Ok<TokenResponse>, UnauthorizedHttpResult, Conflict>> RefreshAsync(
+        RefreshRequest request,
+        IRefreshTokenService refreshTokenService,
+        IAccessTokenIssuer accessTokenIssuer,
+        CancellationToken cancellationToken)
+    {
+        var result = await refreshTokenService.RefreshAsync(request.RefreshToken, cancellationToken);
+
+        if (result.Status is RefreshStatus.Refreshed)
+        {
+            var accessToken = accessTokenIssuer.Issue(result.UserId!.Value);
+
+            return TypedResults.Ok(new TokenResponse(accessToken.Value, result.RawValue!, accessToken.ExpiresAt));
+        }
+
+        return result.Status switch
+        {
+            RefreshStatus.NotFound or
+            RefreshStatus.Expired or
+            RefreshStatus.Revoked or
+            RefreshStatus.ReuseDetected => TypedResults.Unauthorized(),
+            RefreshStatus.Conflict => TypedResults.Conflict(),
+            _ => throw new UnreachableException(),
+        };
     }
 }

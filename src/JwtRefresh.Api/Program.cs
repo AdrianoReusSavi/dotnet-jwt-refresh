@@ -1,5 +1,8 @@
+using System.Globalization;
 using System.Text;
+using System.Threading.RateLimiting;
 using JwtRefresh.Api.Endpoints;
+using JwtRefresh.Api.RateLimiting;
 using JwtRefresh.Application.Auth;
 using JwtRefresh.Application.Interfaces.Repository;
 using JwtRefresh.Application.Interfaces.Security;
@@ -9,6 +12,7 @@ using JwtRefresh.Infrastructure.Auth;
 using JwtRefresh.Infrastructure.Context;
 using JwtRefresh.Infrastructure.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -45,6 +49,44 @@ builder.Services.AddOptions<AccessTokenOptions>()
         "AccessToken: Issuer and Audience must not be empty, SigningKey must be at least 32 bytes and Lifetime must be positive.")
     .ValidateOnStart();
 
+builder.Services.AddRateLimiter(_ => { });
+
+builder.Services.AddOptions<RateLimitingOptions>()
+    .BindConfiguration(RateLimitingOptions.SectionName)
+    .Validate(v => v.PermitLimit > 0 && v.Window > TimeSpan.Zero,
+        "RateLimiting: PermitLimit and Window must be positive.")
+    .ValidateOnStart();
+
+builder.Services.AddOptions<RateLimiterOptions>()
+    .Configure<IOptions<RateLimitingOptions>>((limiter, rateLimiting) =>
+    {
+        limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+        limiter.AddPolicy(RateLimitPolicies.Credentials, context =>
+            RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = rateLimiting.Value.PermitLimit,
+                    Window = rateLimiting.Value.Window,
+                    AutoReplenishment = true,
+                    QueueLimit = 0
+                }));
+
+        limiter.OnRejected = (context, cancellationToken) =>
+        {
+            if (context.Lease.TryGetMetadata(
+                MetadataName.RetryAfter, out var retryAfter))
+            {
+                context.HttpContext.Response.Headers.RetryAfter =
+                    Math.Ceiling(retryAfter.TotalSeconds)
+                        .ToString(CultureInfo.InvariantCulture);
+            }
+
+            return ValueTask.CompletedTask;
+        };
+    });
+
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer();
 
@@ -79,6 +121,7 @@ app.UseStatusCodePages();
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapAuthEndpoints();
 
 app.Run();

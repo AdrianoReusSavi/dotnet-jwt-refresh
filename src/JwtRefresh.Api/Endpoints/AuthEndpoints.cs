@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Security.Claims;
 using JwtRefresh.Api.Endpoints.Contracts;
+using JwtRefresh.Api.RateLimiting;
 using JwtRefresh.Application.Enums;
 using JwtRefresh.Application.Interfaces.Security;
 using JwtRefresh.Application.Interfaces.Service;
@@ -15,9 +16,11 @@ public static class AuthEndpoints
     {
         var group = app.MapGroup("/auth");
 
-        group.MapPost("/register", RegisterAsync);
+        group.MapPost("/register", RegisterAsync)
+            .RequireRateLimiting(RateLimitPolicies.Credentials);
 
-        group.MapPost("/login", LoginAsync);
+        group.MapPost("/login", LoginAsync)
+            .RequireRateLimiting(RateLimitPolicies.Credentials);
 
         group.MapGet("/me", Me).RequireAuthorization();
 

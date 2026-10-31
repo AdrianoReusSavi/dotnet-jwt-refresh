@@ -50,11 +50,19 @@ public class UserService(
         {
             PasswordHasher.Verify(password, DummyPasswordHash);
 
+            logger.LoginUnknownEmail();
+
             return new LoginResult(LoginStatus.InvalidCredentials, null);
         }
 
         if (!user.VerifyPassword(password))
+        {
+            logger.LoginWrongPassword(user.Id);
+
             return new LoginResult(LoginStatus.InvalidCredentials, null);
+        }
+
+        logger.LoginSucceeded(user.Id);
 
         return new LoginResult(LoginStatus.Succeeded, user.Id);
     }

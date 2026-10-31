@@ -4,6 +4,8 @@ using JwtRefresh.Application.Exceptions;
 using JwtRefresh.Application.Services;
 using JwtRefresh.Application.Tests.Fakes;
 using JwtRefresh.Domain.Auth;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 
@@ -19,6 +21,7 @@ public class RefreshTokenServiceTests
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeTimeProvider _timeProvider = new(Now);
     private readonly RefreshTokenService _service;
+    private readonly FakeLogger<RefreshTokenService> _logger = new();
 
     private async Task<(RefreshToken First, string FirstRawValue, string SecondRawValue)> IssueAndRotateAsync()
     {
@@ -43,7 +46,7 @@ public class RefreshTokenServiceTests
             SessionLifetime = SessionLifetime,
         });
 
-        _service = new RefreshTokenService(_repository, _unitOfWork, _timeProvider, options);
+        _service = new RefreshTokenService(_repository, _unitOfWork, _timeProvider, options, _logger);
     }
 
     [Fact]
@@ -367,5 +370,82 @@ public class RefreshTokenServiceTests
         await _service.RevokeAsync(secondRawValue);
 
         Assert.Equal(2, _unitOfWork.CommitCount);
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Logs_A_Warning_When_Reuse_Is_Detected()
+    {
+        var (first, rawValue, _) = await IssueAndRotateAsync();
+
+        await _service.RefreshAsync(rawValue);
+
+        var record = Assert.Single(_logger.Collector.GetSnapshot(), s => s.Id.Id == 1001);
+
+        Assert.Equal(LogLevel.Warning, record.Level);
+        Assert.Equal(first.UserId.ToString(), record.GetStructuredStateValue("UserId"));
+        Assert.Equal(first.FamilyId.ToString(), record.GetStructuredStateValue("FamilyId"));
+    }
+
+    [Fact]
+    public async Task RevokeAsync_Logs_The_End_Of_The_Session()
+    {
+        var (first, _, secondRawValue) = await IssueAndRotateAsync();
+
+        await _service.RevokeAsync(secondRawValue);
+
+        var record = Assert.Single(_logger.Collector.GetSnapshot(), s => s.Id.Id == 1002);
+
+        Assert.Equal(LogLevel.Information, record.Level);
+        Assert.Equal(first.UserId.ToString(), record.GetStructuredStateValue("UserId"));
+        Assert.Equal(first.FamilyId.ToString(), record.GetStructuredStateValue("FamilyId"));
+    }
+
+    [Fact]
+    public async Task RefreshAsync_Logs_A_Conflict()
+    {
+        var (first, rawValue) = RefreshToken.Issue(Guid.NewGuid(), Now, Lifetime, SessionLifetime);
+
+        _repository.Add(first);
+
+        _unitOfWork.PendingConflicts = 1;
+
+        var result = await _service.RefreshAsync(rawValue);
+
+        Assert.Equal(RefreshStatus.Conflict, result.Status);
+
+        var record = Assert.Single(_logger.Collector.GetSnapshot(), s => s.Id.Id == 1003);
+
+        Assert.Equal(LogLevel.Information, record.Level);
+        Assert.Equal(first.UserId.ToString(), record.GetStructuredStateValue("UserId"));
+        Assert.Equal(first.FamilyId.ToString(), record.GetStructuredStateValue("FamilyId"));
+    }
+
+    [Fact]
+    public async Task RefreshTokenService_Never_Logs_The_Raw_Token()
+    {
+        var issuedRawValue = await _service.IssueAsync(Guid.NewGuid());
+        var (_, firstRawValue, secondRawValue) = await IssueAndRotateAsync();
+
+        await _service.RefreshAsync(firstRawValue);
+        await _service.RevokeAsync(issuedRawValue);
+
+        string[] secrets =
+        [
+            issuedRawValue, firstRawValue, secondRawValue,
+            RefreshToken.Hash(issuedRawValue),
+            RefreshToken.Hash(firstRawValue),
+            RefreshToken.Hash(secondRawValue),
+        ];
+
+        var records = _logger.Collector.GetSnapshot();
+
+        Assert.NotEmpty(records);
+
+        foreach (var record in records)
+        foreach (var secret in secrets)
+        {
+            Assert.DoesNotContain(secret, record.Message);
+            Assert.DoesNotContain(record.StructuredState ?? [], r => r.Value?.Contains(secret) == true);
+        }
     }
 }

@@ -7,6 +7,7 @@ using JwtRefresh.Domain.Enums;
 using JwtRefresh.Infrastructure.Context;
 using JwtRefresh.Infrastructure.Repositories;
 using JwtRefresh.Infrastructure.Tests.Base;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
 
@@ -25,7 +26,8 @@ public class UnitOfWorkTests(PostgreSqlFixture fixture) : IClassFixture<PostgreS
             new RefreshTokenRepository(context),
             uow ?? new UnitOfWork(context),
             _timeProvider,
-            Options.Create(new RefreshTokenOptions { Lifetime = Lifetime, SessionLifetime = SessionLifetime })
+            Options.Create(new RefreshTokenOptions { Lifetime = Lifetime, SessionLifetime = SessionLifetime }),
+            NullLogger<RefreshTokenService>.Instance
         );
 
     [Fact]

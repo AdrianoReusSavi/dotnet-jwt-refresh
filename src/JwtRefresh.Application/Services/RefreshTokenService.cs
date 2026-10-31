@@ -5,6 +5,7 @@ using JwtRefresh.Application.Interfaces.Repository;
 using JwtRefresh.Application.Interfaces.Service;
 using JwtRefresh.Domain.Auth;
 using JwtRefresh.Domain.Enums;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace JwtRefresh.Application.Services;
@@ -13,7 +14,8 @@ public class RefreshTokenService(
         IRefreshTokenRepository repository,
         IUnitOfWork uow,
         TimeProvider timeProvider,
-        IOptions<RefreshTokenOptions> options
+        IOptions<RefreshTokenOptions> options,
+        ILogger<RefreshTokenService> logger
     ) : IRefreshTokenService
 {
     private const int MaxRevocationAttempts = 3;

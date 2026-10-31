@@ -45,6 +45,8 @@ public class RefreshTokenService(
         {
             await RevokeFamilyAsync(token.FamilyId, now, cancellationToken);
 
+            logger.ReuseDetected(token.UserId, token.FamilyId);
+
             return new RefreshResult(RefreshStatus.ReuseDetected, null, null);
         }
 
@@ -59,6 +61,8 @@ public class RefreshTokenService(
         }
         catch (ConcurrencyConflictException)
         {
+            logger.RefreshConflict(token.UserId, token.FamilyId);
+
             return new RefreshResult(RefreshStatus.Conflict, null, null);
         }
 
@@ -73,6 +77,8 @@ public class RefreshTokenService(
             return;
 
         await RevokeFamilyAsync(token.FamilyId, timeProvider.GetUtcNow(), cancellationToken);
+
+        logger.SessionEnded(token.UserId, token.FamilyId);
     }
 
     private static RefreshStatus ToRefreshStatus(RotationStatus status) => status switch

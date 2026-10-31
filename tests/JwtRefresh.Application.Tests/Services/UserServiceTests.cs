@@ -2,6 +2,8 @@ using JwtRefresh.Application.Auth;
 using JwtRefresh.Application.Enums;
 using JwtRefresh.Application.Services;
 using JwtRefresh.Application.Tests.Fakes;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Testing;
 using Microsoft.Extensions.Time.Testing;
 
 namespace JwtRefresh.Application.Tests.Services;
@@ -14,10 +16,11 @@ public class UserServiceTests
     private readonly FakeUserRepository _repository = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeTimeProvider _timeProvider = new(Now);
+    private readonly FakeLogger<UserService> _logger = new();
     private readonly UserService _service;
 
     public UserServiceTests()
-        => _service = new UserService(_repository, _unitOfWork, _timeProvider);
+        => _service = new UserService(_repository, _unitOfWork, _timeProvider, _logger);
 
     private static string GenerateEmail()
         => $"{Guid.NewGuid():N}@example.com";
@@ -136,5 +139,79 @@ public class UserServiceTests
         await _service.LoginAsync(email, Password);
 
         Assert.Equal(commitsBefore, _unitOfWork.CommitCount);
+    }
+
+    [Fact]
+    public async Task LoginAsync_Logs_A_Warning_For_An_Unknown_Email()
+    {
+        await _service.LoginAsync(GenerateEmail(), Password);
+
+        var record = Assert.Single(_logger.Collector.GetSnapshot(), s => s.Id.Id == 2001);
+
+        Assert.Equal(LogLevel.Warning, record.Level);
+
+        var keys = (record.StructuredState ?? []).Select(s => s.Key);
+        Assert.Equal(["{OriginalFormat}"], keys);
+    }
+
+    [Fact]
+    public async Task LoginAsync_Logs_A_Warning_For_A_Wrong_Password()
+    {
+        var email = GenerateEmail();
+
+        var register = await _service.RegisterAsync(email, Password);
+
+        await _service.LoginAsync(email, "wrongPassword");
+
+        var record = Assert.Single(_logger.Collector.GetSnapshot(), s => s.Id.Id == 2002);
+
+        Assert.Equal(LogLevel.Warning, record.Level);
+        Assert.Equal(register.UserId.ToString(), record.GetStructuredStateValue("UserId"));
+    }
+
+    [Fact]
+    public async Task LoginAsync_Logs_A_Successful_Login()
+    {
+        var email = GenerateEmail();
+
+        var register = await _service.RegisterAsync(email, Password);
+
+        await _service.LoginAsync(email, Password);
+
+        var record = Assert.Single(_logger.Collector.GetSnapshot(), s => s.Id.Id == 2003);
+
+        Assert.Equal(LogLevel.Information, record.Level);
+        Assert.Equal(register.UserId.ToString(), record.GetStructuredStateValue("UserId"));
+    }
+
+    [Fact]
+    public async Task UserService_Never_Logs_The_Email_Or_The_Password()
+    {
+        var email = $"User.{Guid.NewGuid():N}@Example.com";
+        var unknownEmail = $"Other.{Guid.NewGuid():N}@Example.com";
+        var wrongPassword = "wrongPassword";
+
+        await _service.RegisterAsync(email, Password);
+        await _service.LoginAsync(email, Password);
+        await _service.LoginAsync(email, wrongPassword);
+        await _service.LoginAsync(unknownEmail, Password);
+
+        string[] secrets =
+        [
+            email, email.ToLowerInvariant(),
+            unknownEmail, unknownEmail.ToLowerInvariant(),
+            Password, wrongPassword,
+        ];
+
+        var records = _logger.Collector.GetSnapshot();
+
+        Assert.NotEmpty(records);
+
+        foreach (var record in records)
+        foreach (var secret in secrets)
+        {
+            Assert.DoesNotContain(secret, record.Message);
+            Assert.DoesNotContain(record.StructuredState ?? [], r => r.Value?.Contains(secret) == true);
+        }
     }
 }

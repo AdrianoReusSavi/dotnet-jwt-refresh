@@ -4,13 +4,15 @@ using JwtRefresh.Application.Exceptions;
 using JwtRefresh.Application.Interfaces.Repository;
 using JwtRefresh.Application.Interfaces.Service;
 using JwtRefresh.Domain.Auth;
+using Microsoft.Extensions.Logging;
 
 namespace JwtRefresh.Application.Services;
 
 public class UserService(
         IUserRepository repository,
         IUnitOfWork uow,
-        TimeProvider timeProvider
+        TimeProvider timeProvider,
+        ILogger<UserService> logger
     ) : IUserService
 {
     // Verified when the email is unknown, so both failure paths spend the same BCrypt time

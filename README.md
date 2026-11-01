@@ -1,5 +1,12 @@
 # dotnet-jwt-refresh
 
+<p>
+  <img alt="CI" src="https://github.com/AdrianoReusSavi/dotnet-jwt-refresh/actions/workflows/ci.yml/badge.svg" />
+  <img alt="License" src="https://img.shields.io/badge/license-MIT-green" />
+  <img alt=".NET" src="https://img.shields.io/badge/.NET-10.0-purple" />
+  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-16-blue" />
+</p>
+
 JWT refresh token rotation with reuse detection — .NET 10, ASP.NET Core, PostgreSQL, Docker, TDD.
 
 The authentication flow is complete and tested end to end: register, login, refresh, logout and a protected endpoint, over HTTP, against a real PostgreSQL database, including concurrent requests. Errors follow RFC 9457 (ProblemDetails), login and register are rate limited, and security events are logged as structured JSON.
@@ -139,6 +146,8 @@ Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download) and Docker (or
 ```bash
 dotnet test
 ```
+
+GitHub Actions runs the same restore, build and test on every push and pull request to `master` (`.github/workflows/ci.yml`), on `ubuntu-latest`, which has Docker available for Testcontainers. The SDK version comes from `global.json`, the same one used locally.
 
 The whole project was built test-first: every behavior went through a failing test before the implementation, and the commit history keeps each RED → GREEN → REFACTOR step.
 
